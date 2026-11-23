@@ -243,12 +243,21 @@ def get_events():
 def add_event(event: Event):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("INSERT INTO events (title, date, description) VALUES (?, ?, ?)", 
+    c.execute("INSERT INTO events (title, date, description) VALUES (?, ?, ?)",
               (event.title, event.date, event.description))
     conn.commit()
     event_id = c.lastrowid
     conn.close()
     return {"id": event_id, **event.dict()}
+
+@app.delete("/api/events/{event_id}")
+def delete_event(event_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM events WHERE id = ?", (event_id,))
+    conn.commit()
+    conn.close()
+    return {"success": True}
 
 @app.get("/api/meals")
 def get_meals():
@@ -263,29 +272,42 @@ def get_meals():
 def set_meal(meal: Meal):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO meals (day, meal_name) VALUES (?, ?)", 
-              (meal.day, meal.meal_name))
+    clean_name = meal.meal_name.strip()
+    if not clean_name:
+        c.execute("DELETE FROM meals WHERE day = ?", (meal.day,))
+    else:
+        c.execute("INSERT OR REPLACE INTO meals (day, meal_name) VALUES (?, ?)",
+                  (meal.day, clean_name))
     conn.commit()
     conn.close()
     return meal
 
 # --- Static Files & PWA Routing ---
-# Wir servieren das Frontend direkt über FastAPI, das ist am einfachsten für Docker
-app.mount("/static", StaticFiles(directory="/app/frontend"), name="static")
+FRONTEND_DIR = os.getenv("FRONTEND_DIR", "/app/frontend" if os.path.exists("/app/frontend") else os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend")))
+
+if os.path.exists(FRONTEND_DIR):
+    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 @app.get("/")
 def serve_frontend():
-    return FileResponse("/app/frontend/index.html")
+    index_file = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
+    return {"message": "Couple App API online"}
 
 @app.get("/{file_path:path}")
 def serve_frontend_files(file_path: str):
     if file_path.startswith("api/"):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="API endpoint not found")
-    file = f"/app/frontend/{file_path}"
+    file = os.path.join(FRONTEND_DIR, file_path)
     if os.path.exists(file) and os.path.isfile(file):
         return FileResponse(file)
-    return FileResponse("/app/frontend/index.html")
+    index_file = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
+    from fastapi import HTTPException
+    raise HTTPException(status_code=404, detail="File not found")
 
 if __name__ == "__main__":
     import uvicorn

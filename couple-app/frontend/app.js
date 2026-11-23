@@ -129,7 +129,8 @@ async function loadEvents() {
             const dateStr = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: 'short' });
 
             container.innerHTML += `
-                <div class="card event-card">
+                <div class="card event-card" style="position: relative;">
+                    <button class="delete-note" style="position: absolute; top: 0.8rem; right: 0.8rem;" onclick="deleteEvent(${event.id})">&times;</button>
                     <div class="event-title">${escapeHtml(event.title)}</div>
                     <div class="event-date">📅 ${dateStr}</div>
                 </div>
@@ -170,6 +171,17 @@ async function saveEvent() {
     } catch (e) {
         console.error("Fehler beim Speichern:", e);
         alert("Speichern fehlgeschlagen: " + e.message);
+    }
+}
+
+async function deleteEvent(id) {
+    if (!confirm("Date wirklich löschen?")) return;
+    try {
+        await apiRequest(`/events/${id}`, { method: 'DELETE' });
+        await loadEvents();
+    } catch (e) {
+        console.error("Fehler beim Löschen:", e);
+        alert("Löschen fehlgeschlagen: " + e.message);
     }
 }
 
@@ -230,6 +242,22 @@ async function saveMeal() {
     } catch (e) {
         console.error("Fehler beim Speichern des Essens:", e);
         alert("Speichern fehlgeschlagen: " + e.message);
+    }
+}
+
+async function deleteMeal() {
+    const day = document.getElementById('meal-day').value;
+    try {
+        await apiRequest('/meals', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ day, meal_name: "" })
+        });
+        closeMealModal();
+        await loadMeals();
+    } catch (e) {
+        console.error("Fehler beim Leeren des Essens:", e);
+        alert("Leeren fehlgeschlagen: " + e.message);
     }
 }
 
