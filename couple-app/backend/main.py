@@ -18,8 +18,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Datenbank in einem separaten Data-Ordner für Docker-Volumes
-DB_DIR = "/app/data"
+# Datenbank in einem separaten Data-Ordner fuer Docker-Volumes
+DB_DIR = os.getenv("DATA_DIR", "/app/data" if os.path.exists("/app") else os.path.join(os.path.dirname(__file__), "data"))
 os.makedirs(DB_DIR, exist_ok=True)
 DB_FILE = os.path.join(DB_DIR, "couple_data.db")
 
@@ -123,7 +123,7 @@ def add_shopping_item(item: ShoppingItem):
 def toggle_shopping_item(item_id: int, is_bought: bool):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("UPDATE shopping_list SET is_bought = ? WHERE id = ?", (is_bought, item_id))
+    c.execute("UPDATE shopping_list SET is_bought = ? WHERE id = ?", (1 if is_bought else 0, item_id))
     conn.commit()
     conn.close()
     return {"success": True}
@@ -151,7 +151,7 @@ def get_bucket_list():
 def add_bucket_item(item: BucketItem):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("INSERT INTO bucket_list (title, is_done) VALUES (?, ?)", (item.title, item.is_done))
+    c.execute("INSERT INTO bucket_list (title, is_done) VALUES (?, ?)", (item.title, 1 if item.is_done else 0))
     conn.commit()
     item_id = c.lastrowid
     conn.close()
@@ -161,7 +161,7 @@ def add_bucket_item(item: BucketItem):
 def toggle_bucket_item(item_id: int, is_done: bool):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("UPDATE bucket_list SET is_done = ? WHERE id = ?", (is_done, item_id))
+    c.execute("UPDATE bucket_list SET is_done = ? WHERE id = ?", (1 if is_done else 0, item_id))
     conn.commit()
     conn.close()
     return {"success": True}
@@ -279,8 +279,11 @@ def serve_frontend():
 
 @app.get("/{file_path:path}")
 def serve_frontend_files(file_path: str):
+    if file_path.startswith("api/"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="API endpoint not found")
     file = f"/app/frontend/{file_path}"
-    if os.path.exists(file):
+    if os.path.exists(file) and os.path.isfile(file):
         return FileResponse(file)
     return FileResponse("/app/frontend/index.html")
 

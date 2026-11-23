@@ -1,5 +1,36 @@
-const API_BASE = "/api";
+// Dynamisch ermitteln, ob die App unter /couple/ oder / laeuft
+const isSubpath = window.location.pathname.startsWith('/couple');
+const API_BASE = isSubpath ? '/couple/api' : '/api';
 const DAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
+
+// Zentraler API-Request-Helper mit aussagekraeftiger Fehlerbehandlung
+async function apiRequest(endpoint, options = {}) {
+    const url = `${API_BASE}${endpoint}`;
+    const res = await fetch(url, options);
+    if (!res.ok) {
+        let err = await res.text();
+        try {
+            const j = JSON.parse(err);
+            if (j.detail) err = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail);
+        } catch (_) {}
+        throw new Error(`HTTP ${res.status}: ${err}`);
+    }
+    const contentType = res.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+        return await res.json();
+    }
+    return null;
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
 
 // --- Hilfsfunktionen ---
 function getMealEmoji(name) {
@@ -17,7 +48,6 @@ function getMealEmoji(name) {
 }
 
 function fireConfetti() {
-    // Ein einfaches CSS-Konfetti ohne externe Bibliothek (ausgelöst über ein Element)
     const confetti = document.createElement('div');
     confetti.innerHTML = '🎉';
     confetti.style.position = 'fixed';
@@ -28,29 +58,28 @@ function fireConfetti() {
     confetti.style.zIndex = '9999';
     confetti.style.animation = 'fadeOutUp 1s ease forwards';
     document.body.appendChild(confetti);
-    
-    // Keyframe für die Animation hinzufügen
+
     if (!document.getElementById('confetti-style')) {
         const style = document.createElement('style');
         style.id = 'confetti-style';
         style.innerHTML = `@keyframes fadeOutUp { 0% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -100px) scale(1.5); } }`;
         document.head.appendChild(style);
     }
-    
+
     setTimeout(() => confetti.remove(), 1000);
 }
 
 // --- Navigation ---
 function switchTab(tabId) {
-    // Buttons aktualisieren
     document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
-    event.currentTarget.classList.add('active');
+    if (event && event.currentTarget) {
+        event.currentTarget.classList.add('active');
+    }
 
-    // Views aktualisieren
     document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
-    document.getElementById(`view-${tabId}`).classList.add('active');
+    const activeView = document.getElementById(`view-${tabId}`);
+    if (activeView) activeView.classList.add('active');
 
-    // Titel aktualisieren
     let title = 'Unser Kalender';
     let subtitle = 'Macht euch schöne Pläne!';
 
@@ -84,33 +113,32 @@ function switchTab(tabId) {
 // --- Kalender Funktionen ---
 async function loadEvents() {
     try {
-        const response = await fetch(`${API_BASE}/events`);
-        const events = await response.json();
-        
+        const events = await apiRequest('/events');
         const container = document.getElementById('events-list');
-        container.innerHTML = ''; // Clear
+        container.innerHTML = '';
 
-        if(events.length === 0) {
+        if(!events || events.length === 0) {
             container.innerHTML = '<div class="placeholder" style="text-align:center; color: #94a3b8; margin-top: 2rem;">Noch keine Dates geplant 🥺</div>';
             return;
         }
 
-        // Sort by date
         events.sort((a, b) => new Date(a.date) - new Date(b.date));
 
         events.forEach(event => {
             const dateObj = new Date(event.date);
             const dateStr = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: 'short' });
-            
+
             container.innerHTML += `
                 <div class="card event-card">
-                    <div class="event-title">${event.title}</div>
+                    <div class="event-title">${escapeHtml(event.title)}</div>
                     <div class="event-date">📅 ${dateStr}</div>
                 </div>
             `;
         });
     } catch (e) {
         console.error("Fehler beim Laden der Events:", e);
+        const container = document.getElementById('events-list');
+        if (container) container.innerHTML = `<div class="placeholder" style="color: #ef4444; text-align: center;">Ladefehler: ${escapeHtml(e.message)}</div>`;
     }
 }
 
@@ -125,34 +153,34 @@ function closeEventModal() {
 }
 
 async function saveEvent() {
-    const title = document.getElementById('event-title').value;
+    const title = document.getElementById('event-title').value.trim();
     const date = document.getElementById('event-date').value;
 
     if(!title || !date) return alert("Bitte Titel und Datum eingeben!");
 
     try {
-        await fetch(`${API_BASE}/events`, {
+        await apiRequest('/events', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title, date })
         });
         fireConfetti();
         closeEventModal();
-        loadEvents();
+        await loadEvents();
     } catch (e) {
         console.error("Fehler beim Speichern:", e);
+        alert("Speichern fehlgeschlagen: " + e.message);
     }
 }
 
 // --- Essensplan Funktionen ---
 async function loadMeals() {
     try {
-        const response = await fetch(`${API_BASE}/meals`);
-        const mealsData = await response.json();
-        
-        // Convert array to dict for easier lookup
+        const mealsData = await apiRequest('/meals');
         const mealsDict = {};
-        mealsData.forEach(m => mealsDict[m.day] = m.meal_name);
+        if (Array.isArray(mealsData)) {
+            mealsData.forEach(m => mealsDict[m.day] = m.meal_name);
+        }
 
         const container = document.getElementById('meal-grid');
         container.innerHTML = '';
@@ -161,11 +189,11 @@ async function loadMeals() {
             const mealName = mealsDict[day] || "Noch nichts geplant";
             const emoji = mealsDict[day] ? getMealEmoji(mealsDict[day]) : "🍽️";
             const colorClass = mealsDict[day] ? "color: var(--text-main)" : "color: var(--text-muted)";
-            
+
             container.innerHTML += `
-                <div class="card meal-card" onclick="openMealModal('${day}', '${mealsDict[day] || ''}')">
+                <div class="card meal-card" onclick="openMealModal('${day}', '${escapeHtml(mealsDict[day] || '')}')">
                     <div class="meal-day">${day}</div>
-                    <div class="meal-name" style="${colorClass}">${emoji} ${mealName}</div>
+                    <div class="meal-name" style="${colorClass}">${emoji} ${escapeHtml(mealName)}</div>
                 </div>
             `;
         });
@@ -187,33 +215,32 @@ function closeMealModal() {
 
 async function saveMeal() {
     const day = document.getElementById('meal-day').value;
-    const meal_name = document.getElementById('meal-name').value;
+    const meal_name = document.getElementById('meal-name').value.trim();
 
-    if(!meal_name) return; // Optional: Erlaube leere Felder zum löschen
+    if(!meal_name) return;
 
     try {
-        await fetch(`${API_BASE}/meals`, {
+        await apiRequest('/meals', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ day, meal_name })
         });
         closeMealModal();
-        loadMeals();
+        await loadMeals();
     } catch (e) {
         console.error("Fehler beim Speichern des Essens:", e);
+        alert("Speichern fehlgeschlagen: " + e.message);
     }
 }
 
 // --- Pinnwand Funktionen ---
 async function loadNotes() {
     try {
-        const response = await fetch(`${API_BASE}/notes`);
-        const notes = await response.json();
-        
+        const notes = await apiRequest('/notes');
         const container = document.getElementById('notes-list');
         container.innerHTML = '';
 
-        if(notes.length === 0) {
+        if(!notes || notes.length === 0) {
             container.innerHTML = '<div class="placeholder" style="text-align:center; color: #94a3b8;">Noch keine Nachrichten 💌</div>';
             return;
         }
@@ -222,8 +249,8 @@ async function loadNotes() {
             container.innerHTML += `
                 <div class="note-card">
                     <button class="delete-note" onclick="deleteNote(${note.id})">&times;</button>
-                    <div class="note-content">${note.content}</div>
-                    <div class="note-date">${note.created_at}</div>
+                    <div class="note-content">${escapeHtml(note.content)}</div>
+                    <div class="note-date">${escapeHtml(note.created_at)}</div>
                 </div>
             `;
         });
@@ -238,36 +265,37 @@ async function saveNote() {
     if(!content) return;
 
     try {
-        await fetch(`${API_BASE}/notes`, {
+        await apiRequest('/notes', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content })
         });
         input.value = '';
-        loadNotes();
+        await loadNotes();
     } catch (e) {
         console.error("Fehler beim Speichern der Notiz:", e);
+        alert("Speichern fehlgeschlagen: " + e.message);
     }
 }
 
 async function deleteNote(id) {
     if(!confirm("Nachricht wirklich löschen?")) return;
     try {
-        await fetch(`${API_BASE}/notes/${id}`, { method: 'DELETE' });
-        loadNotes();
+        await apiRequest(`/notes/${id}`, { method: 'DELETE' });
+        await loadNotes();
     } catch (e) {
         console.error("Fehler beim Löschen:", e);
+        alert("Löschen fehlgeschlagen: " + e.message);
     }
 }
 
 // --- Shopping List Funktionen ---
 async function loadShopping() {
     try {
-        const response = await fetch(`${API_BASE}/shopping`);
-        const items = await response.json();
+        const items = await apiRequest('/shopping');
         const container = document.getElementById('shopping-list');
         container.innerHTML = '';
-        if(items.length === 0) {
+        if(!items || items.length === 0) {
             container.innerHTML = '<div class="placeholder" style="text-align:center; color: #94a3b8;">Alles erledigt! 🛒</div>';
             return;
         }
@@ -276,13 +304,15 @@ async function loadShopping() {
             const textStyle = item.is_bought ? 'text-decoration: line-through; color: #cbd5e1;' : '';
             container.innerHTML += `
                 <div class="note-card" style="display: flex; align-items: center; gap: 1rem;">
-                    <input type="checkbox" ${checked} onchange="toggleShopping(${item.id}, this.checked)" style="width: 20px; height: 20px;">
-                    <div class="note-content" style="flex: 1; margin: 0; ${textStyle}">${item.item}</div>
+                    <input type="checkbox" ${checked} onchange="toggleShopping(${item.id}, this.checked)" style="width: 20px; height: 20px; cursor: pointer;">
+                    <div class="note-content" style="flex: 1; margin: 0; ${textStyle}">${escapeHtml(item.item)}</div>
                     <button class="delete-note" style="position: relative; top: 0; right: 0;" onclick="deleteShopping(${item.id})">&times;</button>
                 </div>
             `;
         });
-    } catch(e) { console.error(e); }
+    } catch(e) {
+        console.error(e);
+    }
 }
 
 async function saveShoppingItem() {
@@ -290,38 +320,46 @@ async function saveShoppingItem() {
     const item = input.value.trim();
     if(!item) return;
     try {
-        await fetch(`${API_BASE}/shopping`, {
+        await apiRequest('/shopping', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ item })
         });
         input.value = '';
-        loadShopping();
-    } catch(e) { console.error(e); }
+        await loadShopping();
+    } catch(e) {
+        console.error(e);
+        alert("Speichern fehlgeschlagen: " + e.message);
+    }
 }
 
 async function toggleShopping(id, is_bought) {
     try {
-        await fetch(`${API_BASE}/shopping/${id}?is_bought=${is_bought}`, { method: 'PUT' });
-        loadShopping();
-    } catch(e) { console.error(e); }
+        await apiRequest(`/shopping/${id}?is_bought=${is_bought}`, { method: 'PUT' });
+        await loadShopping();
+    } catch(e) {
+        console.error(e);
+        alert("Statusaktualisierung fehlgeschlagen: " + e.message);
+    }
 }
 
 async function deleteShopping(id) {
     try {
-        await fetch(`${API_BASE}/shopping/${id}`, { method: 'DELETE' });
-        loadShopping();
-    } catch(e) { console.error(e); }
+        await apiRequest(`/shopping/${id}`, { method: 'DELETE' });
+        await loadShopping();
+    } catch(e) {
+        console.error(e);
+        alert("Löschen fehlgeschlagen: " + e.message);
+    }
 }
 
 // --- Bucket List Funktionen ---
 async function loadBucket() {
     try {
-        const response = await fetch(`${API_BASE}/bucket`);
-        const items = await response.json();
+        const items = await apiRequest('/bucket');
         const container = document.getElementById('bucket-list');
         container.innerHTML = '';
-        if(items.length === 0) {
+        if(!items || items.length === 0) {
             container.innerHTML = '<div class="placeholder" style="text-align:center; color: #94a3b8;">Zeit für neue Träume! ✨</div>';
             return;
         }
@@ -330,13 +368,15 @@ async function loadBucket() {
             const textStyle = item.is_done ? 'text-decoration: line-through; color: #cbd5e1;' : '';
             container.innerHTML += `
                 <div class="note-card" style="display: flex; align-items: center; gap: 1rem;">
-                    <input type="checkbox" ${checked} onchange="toggleBucket(${item.id}, this.checked)" style="width: 20px; height: 20px;">
-                    <div class="note-content" style="flex: 1; margin: 0; ${textStyle}">${item.title}</div>
+                    <input type="checkbox" ${checked} onchange="toggleBucket(${item.id}, this.checked)" style="width: 20px; height: 20px; cursor: pointer;">
+                    <div class="note-content" style="flex: 1; margin: 0; ${textStyle}">${escapeHtml(item.title)}</div>
                     <button class="delete-note" style="position: relative; top: 0; right: 0;" onclick="deleteBucket(${item.id})">&times;</button>
                 </div>
             `;
         });
-    } catch(e) { console.error(e); }
+    } catch(e) {
+        console.error(e);
+    }
 }
 
 async function saveBucketItem() {
@@ -344,38 +384,46 @@ async function saveBucketItem() {
     const title = input.value.trim();
     if(!title) return;
     try {
-        await fetch(`${API_BASE}/bucket`, {
+        await apiRequest('/bucket', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title })
         });
         input.value = '';
         fireConfetti();
-        loadBucket();
-    } catch(e) { console.error(e); }
+        await loadBucket();
+    } catch(e) {
+        console.error(e);
+        alert("Speichern fehlgeschlagen: " + e.message);
+    }
 }
 
 async function toggleBucket(id, is_done) {
     try {
-        await fetch(`${API_BASE}/bucket/${id}?is_done=${is_done}`, { method: 'PUT' });
+        await apiRequest(`/bucket/${id}?is_done=${is_done}`, { method: 'PUT' });
         if(is_done) fireConfetti();
-        loadBucket();
-    } catch(e) { console.error(e); }
+        await loadBucket();
+    } catch(e) {
+        console.error(e);
+        alert("Statusaktualisierung fehlgeschlagen: " + e.message);
+    }
 }
 
 async function deleteBucket(id) {
     try {
-        await fetch(`${API_BASE}/bucket/${id}`, { method: 'DELETE' });
-        loadBucket();
-    } catch(e) { console.error(e); }
+        await apiRequest(`/bucket/${id}`, { method: 'DELETE' });
+        await loadBucket();
+    } catch(e) {
+        console.error(e);
+        alert("Löschen fehlgeschlagen: " + e.message);
+    }
 }
 
 // --- Countdown Funktionen ---
 let cdInterval = null;
 async function loadCountdown() {
     try {
-        const response = await fetch(`${API_BASE}/countdown`);
-        const cd = await response.json();
+        const cd = await apiRequest('/countdown');
         const titleEl = document.getElementById('cd-title');
         const timerEl = document.getElementById('cd-timer');
         if(cdInterval) clearInterval(cdInterval);
@@ -407,8 +455,10 @@ async function loadCountdown() {
         };
 
         updateTimer();
-        cdInterval = setInterval(updateTimer, 60000); // Jede Minute updaten
-    } catch(e) { console.error(e); }
+        cdInterval = setInterval(updateTimer, 60000);
+    } catch(e) {
+        console.error(e);
+    }
 }
 
 function openCountdownModal() {
@@ -420,19 +470,22 @@ function closeCountdownModal() {
 }
 
 async function saveCountdown() {
-    const title = document.getElementById('cd-input-title').value;
+    const title = document.getElementById('cd-input-title').value.trim();
     const date = document.getElementById('cd-input-date').value;
-    if(!title || !date) return;
+    if(!title || !date) return alert("Bitte Titel und Datum auswählen!");
 
     try {
-        await fetch(`${API_BASE}/countdown`, {
+        await apiRequest('/countdown', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title, target_date: date })
         });
         closeCountdownModal();
-        loadCountdown();
-    } catch(e) { console.error(e); }
+        await loadCountdown();
+    } catch(e) {
+        console.error(e);
+        alert("Speichern fehlgeschlagen: " + e.message);
+    }
 }
 
 // Init
