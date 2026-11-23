@@ -1,34 +1,49 @@
 version: '3.8'
 
+# Ein einziges gemeinsames Netzwerk für alle deine Projekte
 networks:
-  shared-network:
-    name: shared-strato-network
+  strato-net:
+    name: strato-net
 
 services:
-  # 1. Der Reverse Proxy (Nginx) verteilt die Anfragen
+  # ==========================================
+  # 1. DER TÜRSTEHER (Reverse Proxy)
+  # ==========================================
   proxy:
     image: nginx:alpine
     ports:
       - "80:80"
-      # - "443:443" # Falls du später SSL/HTTPS hinzufügen willst
     networks:
-      - shared-network
+      - strato-net
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./landing-page:/usr/share/nginx/html:ro
     depends_on:
       - couple-app
+      # - crypto-analyzer # EINKOMMENTIEREN, wenn der Crypto-Bot hinzugefügt wurde
 
-  # 2. Die Couple App (Backend + PWA Frontend in einem)
+  # ==========================================
+  # 2. DIE COUPLE APP
+  # ==========================================
   couple-app:
     build: 
       context: ./couple-app
     networks:
-      - shared-network
+      - strato-net
     restart: unless-stopped
     volumes:
-      # Hier wird die SQLite Datenbank persistent gespeichert
       - couple-app-data:/app/data
+
+  # ==========================================
+  # 3. DER CRYPTO BOT (Beispielhaft vorbereitet)
+  # ==========================================
+  # crypto-analyzer:
+  #   build:
+  #     context: ./crypto-analyzer
+  #   networks:
+  #     - strato-net
+  #   restart: unless-stopped
+  #   # WICHTIG: Keine "ports" Sektion hier! Er ist nur intern über das strato-net erreichbar.
 
 volumes:
   couple-app-data:
