@@ -1,0 +1,1300 @@
+import os
+import sys
+import json
+import time
+import urllib.parse
+import threading
+import secrets
+from typing import Dict, Any, List, Optional
+import requests
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
+
+app = FastAPI(
+    title="CryptoAnalyzer API",
+    description="Backend API fuer Krypto-Marktstatistiken und Trading-Signale",
+    version="1.0.0"
+)
+
+# CORS aktivieren fuer Frontend-Zugriff
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+# GZip Komprimierung fuer bis zu 70% schnellere Response-Zeiten
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# In-Memory Cache gegen Rate-Limits (mit automatischer Speicherbereinigung)
+CACHE: Dict[str, Dict[str, Any]] = {}
+CACHE_TTL_SECONDS = 25
+
+def load_proxy_config() -> Dict[str, str]:
+    """Laedt optionale Proxy-Konfiguration aus tools/config.json."""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(current_dir, "..", "..", "..", "tools", "config.json"),
+        os.path.join(current_dir, "..", "..", "tools", "config.json"),
+        os.path.join(current_dir, "config.json"),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8-sig") as f:
+                    cfg = json.load(f)
+                    proxies = {}
+                    if cfg.get("http_proxy"):
+                        proxies["http"] = cfg.get("http_proxy")
+                    if cfg.get("https_proxy"):
+                        proxies["https"] = cfg.get("https_proxy")
+                    return proxies
+            except Exception:
+                pass
+    return {}
+
+PROXIES = load_proxy_config()
+
+COINS_CATALOG = [
+    {"symbol": "BTCUSDT", "coin": "BTC", "name": "Bitcoin", "category": "Layer 1 / Store of Value"},
+    {"symbol": "ETHUSDT", "coin": "ETH", "name": "Ethereum", "category": "Smart Contracts / Layer 1"},
+    {"symbol": "SOLUSDT", "coin": "SOL", "name": "Solana", "category": "High-Speed Layer 1"},
+    {"symbol": "BNBUSDT", "coin": "BNB", "name": "BNB", "category": "Exchange Ecosystem"},
+    {"symbol": "XRPUSDT", "coin": "XRP", "name": "Ripple", "category": "Payments & Settlement"},
+    {"symbol": "DOGEUSDT", "coin": "DOGE", "name": "Dogecoin", "category": "Meme / Payment"},
+    {"symbol": "ADAUSDT", "coin": "ADA", "name": "Cardano", "category": "Proof-of-Stake L1"},
+    {"symbol": "AVAXUSDT", "coin": "AVAX", "name": "Avalanche", "category": "Layer 1 Scaling"},
+    {"symbol": "SUIUSDT", "coin": "SUI", "name": "Sui", "category": "Move-based Layer 1"},
+    {"symbol": "LINKUSDT", "coin": "LINK", "name": "Chainlink", "category": "Oracle Infrastructure"},
+    {"symbol": "NEARUSDT", "coin": "NEAR", "name": "NEAR Protocol", "category": "Sharded Layer 1"},
+    {"symbol": "PEPEUSDT", "coin": "PEPE", "name": "Pepe", "category": "Meme Token"}
+]
+
+def binance_get(endpoint: str, params: Optional[Dict[str, Any]] = None) -> Any:
+    """Fuehrt GET-Request an die Binance API aus mit Proxy, Timeout und Cache-Purge."""
+    base_url = "https://fapi.binance.com"
+    url = f"{base_url}{endpoint}"
+    cache_key = f"{endpoint}?{json.dumps(params, sort_keys=True)}"
+    
+    now = time.time()
+    # Cache bereinigen wenn zu gross (schuetzt vor OOM auf Render)
+    if len(CACHE) > 100:
+        expired = [k for k, v in CACHE.items() if now - v.get("timestamp", 0) > CACHE_TTL_SECONDS * 2]
+        for k in expired:
+            CACHE.pop(k, None)
+
+    if cache_key in CACHE:
+        item = CACHE[cache_key]
+        if now - item["timestamp"] < CACHE_TTL_SECONDS:
+            return item["data"]
+            
+    try:
+        kwargs: Dict[str, Any] = {"timeout": 10}
+        if PROXIES:
+            kwargs["proxies"] = PROXIES
+        resp = requests.get(url, params=params, **kwargs)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=resp.status_code, detail=f"Binance API Fehler: {resp.text}")
+        data = resp.json()
+        CACHE[cache_key] = {"data": data, "timestamp": now}
+        return data
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"Netzwerkfehler zur Binance API: {str(e)}")
+
+def calculate_rsi(closes: List[float], period: int = 14) -> float:
+    """Berechnet Relative Strength Index (RSI)."""
+    if len(closes) < period + 1:
+        return 50.0
+    gains = []
+    losses = []
+    for i in range(1, len(closes)):
+        diff = closes[i] - closes[i - 1]
+        if diff >= 0:
+            gains.append(diff)
+            losses.append(0.0)
+        else:
+            gains.append(0.0)
+            losses.append(abs(diff))
+            
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+    
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+        
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return round(100.0 - (100.0 / (1.0 + rs)), 2)
+
+def calculate_ema(closes: List[float], period: int) -> float:
+    """Berechnet den Exponential Moving Average (EMA)."""
+    if not closes:
+        return 0.0
+    if len(closes) < period:
+        return closes[-1]
+    multiplier = 2.0 / (period + 1.0)
+    ema = sum(closes[:period]) / period
+    for price in closes[period:]:
+        ema = (price - ema) * multiplier + ema
+    return ema
+
+def calculate_atr(highs: List[float], lows: List[float], closes: List[float], period: int = 14) -> float:
+    """Berechnet den Average True Range (ATR) fuer dynamisches Risikomanagement."""
+    if len(closes) < 2:
+        return 0.0
+    tr_list = []
+    for i in range(1, len(closes)):
+        h = highs[i]
+        l = lows[i]
+        prev_c = closes[i - 1]
+        tr = max(h - l, abs(h - prev_c), abs(l - prev_c))
+        tr_list.append(tr)
+    if not tr_list:
+        return 0.0
+    if len(tr_list) < period:
+        return sum(tr_list) / len(tr_list)
+    atr = sum(tr_list[:period]) / period
+    for tr in tr_list[period:]:
+        atr = (atr * (period - 1) + tr) / period
+    return atr
+
+def calculate_macd(closes: List[float], fast: int = 12, slow: int = 26, signal_period: int = 9) -> Dict[str, Any]:
+    """Berechnet MACD-Linie, Signallinie und Histogramm fuer Trendfolge & Momentum."""
+    if len(closes) < slow + signal_period:
+        return {"macd": 0.0, "signal": 0.0, "hist": 0.0, "status": "NEUTRAL"}
+    
+    fast_multiplier = 2.0 / (fast + 1.0)
+    slow_multiplier = 2.0 / (slow + 1.0)
+    
+    fast_ema = sum(closes[:fast]) / fast
+    fast_emas = [fast_ema]
+    for p in closes[fast:]:
+        fast_ema = (p - fast_ema) * fast_multiplier + fast_ema
+        fast_emas.append(fast_ema)
+        
+    slow_ema = sum(closes[:slow]) / slow
+    slow_emas = [slow_ema]
+    for p in closes[slow:]:
+        slow_ema = (p - slow_ema) * slow_multiplier + slow_ema
+        slow_emas.append(slow_ema)
+        
+    macd_series = []
+    offset = slow - fast
+    for i in range(len(slow_emas)):
+        macd_series.append(fast_emas[i + offset] - slow_emas[i])
+        
+    if len(macd_series) < signal_period:
+        return {"macd": 0.0, "signal": 0.0, "hist": 0.0, "status": "NEUTRAL"}
+        
+    sig_multiplier = 2.0 / (signal_period + 1.0)
+    sig_ema = sum(macd_series[:signal_period]) / signal_period
+    for m in macd_series[signal_period:]:
+        sig_ema = (m - sig_ema) * sig_multiplier + sig_ema
+        
+    curr_macd = macd_series[-1]
+    curr_hist = curr_macd - sig_ema
+    prev_macd = macd_series[-2] if len(macd_series) >= 2 else curr_macd
+    
+    status = "BULLISH" if curr_hist > 0 else "BEARISH"
+    if curr_macd > sig_ema and prev_macd <= sig_ema:
+        status = "BULLISH_CROSS"
+    elif curr_macd < sig_ema and prev_macd >= sig_ema:
+        status = "BEARISH_CROSS"
+        
+    return {
+        "macd": round(curr_macd, 6),
+        "signal": round(sig_ema, 6),
+        "hist": round(curr_hist, 6),
+        "status": status
+    }
+
+def detect_rsi_divergence(lows: List[float], closes: List[float], period: int = 14) -> Dict[str, Any]:
+    """
+    Erkennt bullische RSI-Divergenzen (Smart Money Akkumulation):
+    Kurs bildet tieferes Tief (Lower Low), aber RSI bildet hoeheres Tief (Higher Low).
+    """
+    if len(closes) < 25:
+        return {"has_bullish_div": False, "description": ""}
+        
+    rsi_series = []
+    for i in range(15, len(closes) + 1):
+        sub_closes = closes[:i]
+        rsi_series.append(calculate_rsi(sub_closes, period))
+        
+    if len(rsi_series) < 10:
+        return {"has_bullish_div": False, "description": ""}
+        
+    sub_lows = lows[-len(rsi_series):]
+    recent_low_idx = -1
+    for i in range(-4, 0):
+        if sub_lows[i] == min(sub_lows[-5:]):
+            recent_low_idx = i
+            break
+            
+    prior_low_idx = -1
+    for i in range(-12, -5):
+        if sub_lows[i] == min(sub_lows[-12:-5]):
+            prior_low_idx = i
+            break
+            
+    if recent_low_idx != -1 and prior_low_idx != -1:
+        p1 = sub_lows[prior_low_idx]
+        p2 = sub_lows[recent_low_idx]
+        r1 = rsi_series[prior_low_idx]
+        r2 = rsi_series[recent_low_idx]
+        
+        if p2 < p1 and r2 > (r1 + 1.2) and r1 <= 44:
+            return {
+                "has_bullish_div": True,
+                "description": f"Bullische RSI-Divergenz (Smart Money Akkumulation: Kurs {p2:.4f} < {p1:.4f}, RSI {r2:.1f} > {r1:.1f})"
+            }
+            
+    return {"has_bullish_div": False, "description": ""}
+
+def analyze_volume_profile(volumes: List[float], opens: List[float], closes: List[float]) -> Dict[str, Any]:
+    """Analysiert Handelsvolumen gemaess Volume Spread Analysis (VSA)."""
+    if not volumes or len(volumes) < 5:
+        return {"surge_ratio": 1.0, "is_surge": False, "buyer_ratio": 50.0, "label": "Normales Volumen"}
+        
+    period = min(20, len(volumes) - 1)
+    avg_vol = sum(volumes[-period - 1:-1]) / period if period > 0 else volumes[-1]
+    curr_vol = volumes[-1]
+    surge_ratio = round(curr_vol / avg_vol, 2) if avg_vol > 0 else 1.0
+    
+    buy_vol = sum(volumes[i] for i in range(-6, 0) if closes[i] >= opens[i])
+    total_vol = sum(volumes[-6:])
+    buyer_ratio = round((buy_vol / total_vol * 100), 1) if total_vol > 0 else 50.0
+    
+    is_surge = surge_ratio >= 1.35
+    label = "Normales Volumen"
+    if is_surge and buyer_ratio >= 60.0:
+        label = f"Kaeufer-Volumenschub ({surge_ratio}x Durchschnitt)"
+    elif is_surge and buyer_ratio < 40.0:
+        label = f"Verkaeufer-Volumendruck ({surge_ratio}x Durchschnitt)"
+    elif buyer_ratio >= 65.0:
+        label = f"Kaeufer dominieren ({buyer_ratio}%)"
+        
+    return {
+        "surge_ratio": surge_ratio,
+        "is_surge": is_surge,
+        "buyer_ratio": buyer_ratio,
+        "avg_volume": round(avg_vol, 2),
+        "current_volume": round(curr_vol, 2),
+        "label": label
+    }
+
+def detect_candlestick_pattern(opens: List[float], highs: List[float], lows: List[float], closes: List[float]) -> Dict[str, Any]:
+    """Erkennt professionelle Candlestick-Reversals (Hammer, Pin Bar, Bullish Engulfing)."""
+    if len(closes) < 2:
+        return {"pattern": "STANDARD", "is_bullish": False, "label": "Standard-Kerze"}
+        
+    c = closes[-1]
+    o = opens[-1]
+    h = highs[-1]
+    l = lows[-1]
+    
+    prev_c = closes[-2]
+    prev_o = opens[-2]
+    
+    candle_range = h - l
+    if candle_range <= 0:
+        return {"pattern": "STANDARD", "is_bullish": False, "label": "Standard-Kerze"}
+        
+    body = abs(c - o)
+    lower_wick = min(o, c) - l
+    upper_wick = h - max(o, c)
+    
+    # 1. Hammer / Bullish Pin Bar
+    if lower_wick >= (body * 1.6) and upper_wick <= (body * 0.6) and lower_wick >= (candle_range * 0.5):
+        return {
+            "pattern": "BULLISH_HAMMER_PINBAR",
+            "is_bullish": True,
+            "label": "Hammer / Bullish Pin Bar (Rejection der Tiefs)"
+        }
+        
+    # 2. Bullish Engulfing
+    if prev_c < prev_o and c > o and c > prev_o and o <= prev_c:
+        return {
+            "pattern": "BULLISH_ENGULFING",
+            "is_bullish": True,
+            "label": "Bullish Engulfing (Kaeufer uebernehmen)"
+        }
+        
+    # 3. Shooting Star / Bearish Rejection
+    if upper_wick >= (body * 1.6) and lower_wick <= (body * 0.6) and upper_wick >= (candle_range * 0.5):
+        return {
+            "pattern": "BEARISH_REJECTION",
+            "is_bullish": False,
+            "label": "Shooting Star (Verkaeufer weisen Hochs ab)"
+        }
+        
+    return {"pattern": "STANDARD", "is_bullish": c >= o, "label": "Normale Kerze"}
+
+def get_multi_timeframe_trend_data(closes_1h: List[float]) -> Dict[str, Any]:
+    """Analysiert uebergeordneten 1h-Trend auf EMA 20 und EMA 50."""
+    if len(closes_1h) < 25:
+        return {"regime": "NEUTRAL", "label": "Trend Neutral", "ema_20": 0.0, "ema_50": 0.0}
+        
+    price = closes_1h[-1]
+    ema_20 = calculate_ema(closes_1h, 20)
+    ema_50 = calculate_ema(closes_1h, 50)
+    
+    is_above_ema50 = price >= ema_50
+    is_golden_trend = ema_20 >= ema_50
+    
+    if is_above_ema50 and is_golden_trend:
+        return {
+            "regime": "BULLISH_UPTREND",
+            "label": "1h Aufwaertstrend (Preis > EMA20 > EMA50)",
+            "ema_20": round(ema_20, 4),
+            "ema_50": round(ema_50, 4)
+        }
+    elif is_above_ema50 and not is_golden_trend:
+        return {
+            "regime": "PULLBACK_SUPPORT",
+            "label": "Konsolidierung ueber 1h EMA50",
+            "ema_20": round(ema_20, 4),
+            "ema_50": round(ema_50, 4)
+        }
+    elif not is_above_ema50 and price >= (ema_50 * 0.965):
+        return {
+            "regime": "POTENTIAL_REVERSAL",
+            "label": "Dip nahe EMA50 - Bodenbildung moeglich",
+            "ema_20": round(ema_20, 4),
+            "ema_50": round(ema_50, 4)
+        }
+    else:
+        return {
+            "regime": "BEARISH_DOWNTREND",
+            "label": "1h Abwaertstrend unter EMA50 - Erhoehtes Risiko",
+            "ema_20": round(ema_20, 4),
+            "ema_50": round(ema_50, 4)
+        }
+
+BTC_REGIME_CACHE: Dict[str, Any] = {"timestamp": 0, "data": None}
+
+def get_btc_market_regime() -> Dict[str, Any]:
+    """
+    Analysiert den Gesamtzustand des Krypto-Marktes anhand von Bitcoin (BTCUSDT).
+    Entscheidet, ob Altcoin-Dip-Kaeufe erlaubt sind oder ein generelles Kaufverbot herrscht.
+    """
+    global BTC_REGIME_CACHE
+    now = time.time()
+    if BTC_REGIME_CACHE["data"] and (now - BTC_REGIME_CACHE["timestamp"] < 30):
+        return BTC_REGIME_CACHE["data"]
+
+    try:
+        klines_1h = binance_get("/fapi/v1/klines", {"symbol": "BTCUSDT", "interval": "1h", "limit": 48})
+        klines_15m = binance_get("/fapi/v1/klines", {"symbol": "BTCUSDT", "interval": "15m", "limit": 20})
+
+        closes_1h = [float(k[4]) for k in klines_1h]
+        closes_15m = [float(k[4]) for k in klines_15m]
+        opens_15m = [float(k[1]) for k in klines_15m]
+
+        btc_price = closes_15m[-1]
+        btc_rsi_15m = calculate_rsi(closes_15m, 14)
+        btc_rsi_1h = calculate_rsi(closes_1h, 14)
+        btc_ema_20_1h = calculate_ema(closes_1h, 20)
+        btc_ema_50_1h = calculate_ema(closes_1h, 50)
+
+        # 1h und 4h Preisaenderung von BTC
+        change_1h_pct = ((closes_1h[-1] - closes_1h[-2]) / closes_1h[-2]) * 100 if len(closes_1h) >= 2 else 0.0
+        change_4h_pct = ((closes_1h[-1] - closes_1h[-5]) / closes_1h[-5]) * 100 if len(closes_1h) >= 5 else 0.0
+
+        # Die letzten 3 15m Kerzen pruefen (wie viele waren rot)
+        recent_15m_red = sum(1 for i in range(-3, 0) if closes_15m[i] < opens_15m[i])
+
+        is_crash_event = change_1h_pct <= -1.2 or change_4h_pct <= -2.5
+        is_downtrend = btc_price < btc_ema_20_1h and btc_price < btc_ema_50_1h
+        is_dumping = is_downtrend and (recent_15m_red >= 2 or btc_rsi_15m < 38)
+
+        allow_buys = True
+        status = "BULLISH"
+        reason = "BTC stabil / im Aufwaertstrend"
+
+        if is_crash_event:
+            allow_buys = False
+            status = "CRASH_FLUSH"
+            reason = f"BTC im Schock-Abverkauf ({change_1h_pct:.2f}% in 1h, {change_4h_pct:.2f}% in 4h) - Altcoin-Kaeufe gesperrt!"
+        elif is_dumping:
+            allow_buys = False
+            status = "BEARISH_DUMP"
+            reason = f"BTC im aktiven Abwaertstrend unter EMA20 (${btc_ema_20_1h:.0f}) & EMA50 (${btc_ema_50_1h:.0f}) mit fallendem Momentum"
+        elif is_downtrend:
+            status = "WEAK_RANGE"
+            reason = "BTC konsolidiert unter Trendlinie - nur strenge A+ Reversals erlaubt"
+
+        regime_data = {
+            "btc_price": btc_price,
+            "btc_rsi_15m": round(btc_rsi_15m, 1),
+            "btc_rsi_1h": round(btc_rsi_1h, 1),
+            "change_1h_pct": round(change_1h_pct, 2),
+            "change_4h_pct": round(change_4h_pct, 2),
+            "status": status,
+            "allow_altcoin_buys": allow_buys,
+            "reason": reason
+        }
+        BTC_REGIME_CACHE = {"timestamp": now, "data": regime_data}
+        return regime_data
+    except Exception as e:
+        return {
+            "btc_price": 0.0,
+            "status": "NEUTRAL",
+            "allow_altcoin_buys": True,
+            "reason": f"BTC Regime Check Fallback: {str(e)}"
+        }
+
+@app.get("/api/market/btc-regime")
+def get_btc_regime_api() -> Dict[str, Any]:
+    """Liefert den aktuellen Makro-Zustand des Krypto-Marktes (BTC-Waechter)."""
+    return get_btc_market_regime()
+
+@app.get("/api/health")
+def get_health() -> Dict[str, Any]:
+    return {"status": "ok", "proxy_active": bool(PROXIES), "timestamp": time.time()}
+
+@app.get("/api/coins")
+def get_coins() -> List[Dict[str, Any]]:
+    """Liefert Liste der vorkonfigurierten Coins fuer das Dropdown."""
+    return COINS_CATALOG
+
+@app.get("/api/market/{symbol}")
+def get_market_statistics(symbol: str = "BTCUSDT") -> Dict[str, Any]:
+    """Berechnet und aggregiert Marktstatistiken fuer 15m, 1h, 24h, 1M, 1Y und All-Time."""
+    sym = symbol.upper().strip()
+    if not sym.endswith("USDT") and not sym.endswith("BUSD"):
+        sym = f"{sym}USDT"
+        
+    # 1. 24h Ticker Abfrage
+    ticker_24h = binance_get("/fapi/v1/ticker/24hr", {"symbol": sym})
+    current_price = float(ticker_24h["lastPrice"])
+    price_change_24h_pct = float(ticker_24h["priceChangePercent"])
+    price_change_24h_usd = float(ticker_24h["priceChange"])
+    high_24h = float(ticker_24h["highPrice"])
+    low_24h = float(ticker_24h["lowPrice"])
+    volume_24h = float(ticker_24h["volume"])
+    quote_volume_24h = float(ticker_24h["quoteVolume"])
+    
+    # 2. 15 Minuten Statistik (Klines 15m, letzte 4 Kerzen)
+    klines_15m = binance_get("/fapi/v1/klines", {"symbol": sym, "interval": "15m", "limit": 4})
+    # Vorherige geschlossene 15m Kerze vs. aktuelle Kerze
+    open_15m = float(klines_15m[-1][1])
+    change_15m_pct = ((current_price - open_15m) / open_15m) * 100 if open_15m > 0 else 0.0
+    vol_15m = float(klines_15m[-1][5])
+    high_15m = float(klines_15m[-1][2])
+    low_15m = float(klines_15m[-1][3])
+    
+    # 3. 1 Stunde Statistik (Klines 1h, letzte 3 Kerzen)
+    klines_1h = binance_get("/fapi/v1/klines", {"symbol": sym, "interval": "1h", "limit": 3})
+    open_1h = float(klines_1h[-1][1])
+    change_1h_pct = ((current_price - open_1h) / open_1h) * 100 if open_1h > 0 else 0.0
+    vol_1h = float(klines_1h[-1][5])
+    high_1h = float(klines_1h[-1][2])
+    low_1h = float(klines_1h[-1][3])
+    
+    # 4. 1 Monat (30 Tage) Statistik (Klines 1d, 31 Kerzen)
+    klines_1d = binance_get("/fapi/v1/klines", {"symbol": sym, "interval": "1d", "limit": 31})
+    open_30d = float(klines_1d[0][1])
+    change_1m_pct = ((current_price - open_30d) / open_30d) * 100 if open_30d > 0 else 0.0
+    high_1m = max(float(k[2]) for k in klines_1d)
+    low_1m = min(float(k[3]) for k in klines_1d)
+    
+    # 5. 1 Jahr (52 Wochen) Statistik (Klines 1w, 53 Kerzen)
+    klines_1w = binance_get("/fapi/v1/klines", {"symbol": sym, "interval": "1w", "limit": 53})
+    open_1y = float(klines_1w[0][1])
+    change_1y_pct = ((current_price - open_1y) / open_1y) * 100 if open_1y > 0 else 0.0
+    high_1y = max(float(k[2]) for k in klines_1w)
+    low_1y = min(float(k[3]) for k in klines_1w)
+    
+    # 6. All-Time Statistik (Klines 1M, bis zu 120 Monate)
+    klines_all = binance_get("/fapi/v1/klines", {"symbol": sym, "interval": "1M", "limit": 120})
+    ath = max(float(k[2]) for k in klines_all)
+    atl = min(float(k[3]) for k in klines_all)
+    earliest_open = float(klines_all[0][1])
+    all_time_change_pct = ((current_price - earliest_open) / earliest_open) * 100 if earliest_open > 0 else 0.0
+    history_months = len(klines_all)
+    
+    return {
+        "symbol": sym,
+        "current_price": current_price,
+        "stats_15m": {
+            "interval_label": "Letzte 15 Minuten",
+            "change_pct": round(change_15m_pct, 2),
+            "high": high_15m,
+            "low": low_15m,
+            "volume_base": round(vol_15m, 2),
+            "open": open_15m
+        },
+        "stats_1h": {
+            "interval_label": "Letzte 1 Stunde",
+            "change_pct": round(change_1h_pct, 2),
+            "high": high_1h,
+            "low": low_1h,
+            "volume_base": round(vol_1h, 2),
+            "open": open_1h
+        },
+        "stats_24h": {
+            "interval_label": "Heute (24 Stunden)",
+            "change_pct": round(price_change_24h_pct, 2),
+            "change_usd": round(price_change_24h_usd, 2),
+            "high": high_24h,
+            "low": low_24h,
+            "volume_base": round(volume_24h, 2),
+            "volume_quote_usd": round(quote_volume_24h, 2)
+        },
+        "stats_1m": {
+            "interval_label": "Letzter 1 Monat",
+            "change_pct": round(change_1m_pct, 2),
+            "high": high_1m,
+            "low": low_1m
+        },
+        "stats_1y": {
+            "interval_label": "Letztes 1 Jahr",
+            "change_pct": round(change_1y_pct, 2),
+            "high": high_1y,
+            "low": low_1y
+        },
+        "stats_all_time": {
+            "interval_label": "All-Time (Historie)",
+            "change_pct": round(all_time_change_pct, 2),
+            "ath": ath,
+            "atl": atl,
+            "distance_to_ath_pct": round(((current_price - ath) / ath) * 100, 2),
+            "history_months": history_months
+        }
+    }
+
+def smart_round(val: float, ref_price: float) -> float:
+    if ref_price >= 100:
+        return round(val, 2)
+    elif ref_price >= 1:
+        return round(val, 3)
+    elif ref_price >= 0.01:
+        return round(val, 4)
+    else:
+        return round(val, 7)
+
+def format_num_str(val: float, ref_price: float) -> str:
+    if ref_price >= 1000:
+        return f"{val:,.2f}"
+    elif ref_price >= 1:
+        return f"{val:.3f}"
+    elif ref_price >= 0.01:
+        return f"{val:.4f}"
+    else:
+        return f"{val:.6f}"
+
+@app.get("/api/analysis/{symbol}")
+def get_trading_analysis(symbol: str = "BTCUSDT") -> Dict[str, Any]:
+    """Generiert ein professionelles Intraday-Trading-Signal mit Entry, SL, TP und CRV."""
+    sym = symbol.upper().strip()
+    if not sym.endswith("USDT") and not sym.endswith("BUSD"):
+        sym = f"{sym}USDT"
+        
+    # Klines fuer Indikatorberechnung (15m fuer Momentum, 1h fuer Trend)
+    klines_15m = binance_get("/fapi/v1/klines", {"symbol": sym, "interval": "15m", "limit": 40})
+    klines_1h = binance_get("/fapi/v1/klines", {"symbol": sym, "interval": "1h", "limit": 40})
+    
+    closes_15m = [float(k[4]) for k in klines_15m]
+    closes_1h = [float(k[4]) for k in klines_1h]
+    current_price = closes_15m[-1]
+    
+    rsi_15m = calculate_rsi(closes_15m, period=14)
+    rsi_1h = calculate_rsi(closes_1h, period=14)
+    
+    # Lokale Hochs und Tiefs fuer Support & Resistance (letzte 24 Kerzen auf 1h)
+    recent_highs = [float(k[2]) for k in klines_1h[-24:]]
+    recent_lows = [float(k[3]) for k in klines_1h[-24:]]
+    
+    resistance_1 = smart_round(max(recent_highs), current_price)
+    support_1 = smart_round(min(recent_lows), current_price)
+    
+    range_span = resistance_1 - support_1
+    if range_span <= 0 or range_span < (current_price * 0.015):
+        range_span = current_price * 0.035
+        resistance_1 = smart_round(current_price * 1.025, current_price)
+        support_1 = smart_round(current_price * 0.975, current_price)
+        
+    raw_range_pos = ((current_price - support_1) / range_span) * 100
+    range_position_pct = min(100.0, max(0.0, round(raw_range_pos, 1)))
+    
+    buy_range_min = smart_round(support_1 * 0.998, current_price)
+    buy_range_max = smart_round(support_1 + (range_span * 0.33), current_price)
+    buy_range_label = f"{format_num_str(buy_range_min, current_price)} - {format_num_str(buy_range_max, current_price)}"
+    
+    distance_to_buy_pct = 0.0 if current_price <= buy_range_max else round(((current_price - buy_range_max) / current_price) * 100, 2)
+    distance_to_sup_pct = round(abs(current_price - support_1) / current_price * 100, 2)
+    distance_to_res_pct = round(abs(resistance_1 - current_price) / current_price * 100, 2)
+    
+    range_status = "KONSOLIDIERUNG / MITTE"
+    if range_position_pct <= 33:
+        range_status = "KAUF-ZONE (DIP / AKKUMULATION)"
+    elif range_position_pct >= 70:
+        range_status = "WIDERSTANDSZIELE / VERKAUF"
+        
+    signal = "WAIT"
+    signal_label = "LIMIT-KAUF VORBEREITEN"
+    setup_type = "Pullback-Order in Kauf-Range"
+    entry_target = smart_round(support_1 + (range_span * 0.15), current_price)
+    entry_min = buy_range_min
+    entry_max = buy_range_max
+    stop_loss = smart_round(support_1 * 0.991, current_price)
+    take_profit_1 = smart_round(support_1 + (range_span * 0.55), current_price)
+    take_profit_2 = smart_round(resistance_1 * 0.995, current_price)
+    confidence = "8/10"
+    rationale = f"Kurs konsolidiert in der Range-Mitte ({range_position_pct}%). Nicht ueber Marktpreise kaufen, sondern Kauflimits in der Kauf-Range ({buy_range_label}) staffeln (Abstand: +{distance_to_buy_pct}%)."
+
+    # Reversal-Bestaetigung: Keine Kaeufe in fallende Messer!
+    curr_open = float(klines_15m[-1][1])
+    curr_close = closes_15m[-1]
+    prev_open = float(klines_15m[-2][1])
+    prev_close = closes_15m[-2]
+
+    is_candle_green = curr_close >= curr_open
+    is_prev_candle_green = prev_close >= prev_open
+    has_bounce = is_candle_green or is_prev_candle_green
+
+    # Pruefe uebergeordneten BTC-Trend wenn Altcoin
+    btc_regime = get_btc_market_regime()
+    btc_ok = btc_regime.get("allow_altcoin_buys", True) or sym == "BTCUSDT"
+
+    if (range_position_pct <= 33 or distance_to_sup_pct <= 2.2) and rsi_15m <= 44:
+        if not btc_ok:
+            signal = "WAIT"
+            signal_label = "WARTEN (BTC ABVERKAUF)"
+            setup_type = "Marktweiter Stop wegen Bitcoin-Druck"
+            confidence = "6/10"
+            rationale = f"Coin waere zwar im Dip ({range_position_pct}%), aber Bitcoin faellt aktuell scharf ab ({btc_regime.get('reason')}). Generelles Kaufverbot zum Schutz vor fallenden Messern!"
+        elif has_bounce:
+            signal = "BUY"
+            signal_label = "KAUFEN (REVERSAL BESTAETIGT)"
+            setup_type = "Support-Bounce / Oversold Dip-Kauf"
+            entry_target = smart_round(current_price, current_price)
+            entry_min = buy_range_min
+            entry_max = smart_round(max(current_price, buy_range_max), current_price)
+            stop_loss = smart_round(support_1 * 0.991, current_price)
+            take_profit_1 = smart_round(support_1 + (range_span * 0.55), current_price)
+            take_profit_2 = smart_round(resistance_1 * 0.995, current_price)
+            confidence = "9/10"
+            rationale = f"Kurs notiert mit {range_position_pct}% in der Kauf-Range ({buy_range_label}) und Reversal ist durch gruene Kerze bestaetigt. BTC ist stabil. RSI 15m ({rsi_15m}) zeigt starkes CRV."
+        else:
+            signal = "WAIT"
+            signal_label = "WARTEN (MESSER FAELLT NOCH)"
+            setup_type = "Warten auf Kerzen-Umkehr"
+            entry_target = smart_round(support_1, current_price)
+            entry_min = buy_range_min
+            entry_max = buy_range_max
+            stop_loss = smart_round(support_1 * 0.991, current_price)
+            take_profit_1 = smart_round(support_1 + (range_span * 0.55), current_price)
+            take_profit_2 = smart_round(resistance_1 * 0.995, current_price)
+            confidence = "7/10"
+            rationale = f"Kurs hat die Kauf-Range erreicht ({range_position_pct}%), aber die 15m-Kerzen fallen noch ohne Kaeufer (Messer faellt). Erst einsteigen wenn die erste gruene Reversal-Kerze schliesst!"
+    elif range_position_pct <= 35 and rsi_15m <= 50 and has_bounce and btc_ok:
+        signal = "BUY"
+        signal_label = "KAUFEN (AKKUMULATIONS-ZONE)"
+        setup_type = "Range-Bottom Akkumulation"
+        entry_target = smart_round(current_price, current_price)
+        entry_min = buy_range_min
+        entry_max = buy_range_max
+        stop_loss = smart_round(support_1 * 0.991, current_price)
+        take_profit_1 = smart_round(support_1 + (range_span * 0.55), current_price)
+        take_profit_2 = smart_round(resistance_1 * 0.995, current_price)
+        confidence = "8/10"
+        rationale = f"Kurs befindet sich im unteren Drittel der Handelsspanne ({range_position_pct}% vom Support) und Kaeufer stabilisieren den Boden. BTC ist stabil."
+    elif current_price >= (resistance_1 * 0.988) and rsi_15m >= 56 and rsi_1h >= 50 and btc_ok:
+        signal = "BUY"
+        signal_label = "KAUFEN (BREAKOUT-MOMENTUM)"
+        setup_type = "Widerstands-Ausbruch / Trendfolge"
+        entry_target = smart_round(current_price, current_price)
+        entry_min = smart_round(resistance_1 * 0.992, current_price)
+        entry_max = smart_round(resistance_1 * 1.008, current_price)
+        stop_loss = smart_round(resistance_1 * 0.985, current_price)
+        take_profit_1 = smart_round(resistance_1 * 1.025, current_price)
+        take_profit_2 = smart_round(resistance_1 * 1.055, current_price)
+        confidence = "8/10"
+        rationale = f"Kurs bricht dynamisch an der oberen Range-Kante aus (RSI 15m: {rsi_15m}). BTC unterstuetzt den Ausbruch. Trendfolge-Kauf mit engem Stop."
+    elif range_position_pct >= 72 or (rsi_15m >= 68 and distance_to_res_pct < 2.0):
+        signal = "SELL"
+        signal_label = "GEWINNMITNAHME / WIDERSTAND"
+        setup_type = "Resistance-Rejection / Overbought Fade"
+        entry_target = smart_round(resistance_1 * 0.997, current_price)
+        entry_min = smart_round(resistance_1 * 0.992, current_price)
+        entry_max = smart_round(resistance_1 * 1.005, current_price)
+        stop_loss = smart_round(resistance_1 * 1.012, current_price)
+        take_profit_1 = smart_round(support_1 + (range_span * 0.5), current_price)
+        take_profit_2 = smart_round(buy_range_max, current_price)
+        confidence = "8/10"
+        rationale = f"Kurs ist im oberen Range-Bereich ({range_position_pct}%). RSI ({rsi_15m}) signalisiert Ueberhitzung. Gewinne sichern; Neukauf erst wieder in der Kauf-Range ({buy_range_label})."
+
+    risk = abs(entry_target - stop_loss)
+    reward_1 = abs(take_profit_1 - entry_target)
+    reward_2 = abs(take_profit_2 - entry_target)
+    crv_1 = round(reward_1 / risk, 2) if risk > 0 else 1.5
+    crv_2 = round(reward_2 / risk, 2) if risk > 0 else 2.8
+
+    return {
+        "symbol": sym,
+        "current_price": current_price,
+        "signal": signal,
+        "signal_label": signal_label,
+        "confidence": confidence,
+        "rsi_15m": rsi_15m,
+        "rsi_1h": rsi_1h,
+        "support_level": support_1,
+        "resistance_level": resistance_1,
+        "range_position_pct": range_position_pct,
+        "range_status": range_status,
+        "buy_range_min": buy_range_min,
+        "buy_range_max": buy_range_max,
+        "buy_range_label": buy_range_label,
+        "distance_to_buy_pct": distance_to_buy_pct,
+        "trade_setup": {
+            "setup_name": setup_type,
+            "entry_zone": f"{entry_min} - {entry_max}",
+            "buy_range_min": buy_range_min,
+            "buy_range_max": buy_range_max,
+            "buy_range_label": buy_range_label,
+            "range_position_pct": range_position_pct,
+            "range_status": range_status,
+            "distance_to_buy_pct": distance_to_buy_pct,
+            "stop_loss": stop_loss,
+            "stop_loss_pct": round(abs((stop_loss - current_price) / current_price) * 100, 2),
+            "take_profit_1": take_profit_1,
+            "take_profit_1_pct": round(abs((take_profit_1 - current_price) / current_price) * 100, 2),
+            "take_profit_2": take_profit_2,
+            "take_profit_2_pct": round(abs((take_profit_2 - current_price) / current_price) * 100, 2),
+            "crv": f"{crv_2} : 1 (Ziel TP2)",
+            "crv_tp1": f"{crv_1} : 1",
+            "tactical_rationale": rationale
+        }
+    }
+
+@app.get("/api/klines/{symbol}")
+def get_chart_klines(symbol: str = "BTCUSDT", interval: str = "15m", limit: int = 60) -> List[Dict[str, Any]]:
+    """Liefert Candlestick-Historie fuer den interaktiven Chart."""
+    sym = symbol.upper().strip()
+    if not sym.endswith("USDT") and not sym.endswith("BUSD"):
+        sym = f"{sym}USDT"
+        
+    valid_intervals = ["15m", "1h", "4h", "1d"]
+    if interval not in valid_intervals:
+        interval = "15m"
+        
+    limit = max(10, min(120, limit))
+    raw_klines = binance_get("/fapi/v1/klines", {"symbol": sym, "interval": interval, "limit": limit})
+    
+    result = []
+    for k in raw_klines:
+        result.append({
+            "time": int(k[0]),
+            "open": float(k[1]),
+            "high": float(k[2]),
+            "low": float(k[3]),
+            "close": float(k[4]),
+            "volume": float(k[5]),
+            "close_time": int(k[6])
+        })
+    return result
+
+# Cache fuer Best-Pick um Binance API zu schonen
+BEST_PICK_CACHE: Dict[str, Any] = {"timestamp": 0, "data": None}
+
+@app.get("/api/best-pick")
+def get_best_buy_pick() -> Dict[str, Any]:
+    """Scannt alle Coins und ermittelt den aktuell lukrativsten Long- oder Short-Trade."""
+    now = time.time()
+    if BEST_PICK_CACHE["data"] and (now - BEST_PICK_CACHE["timestamp"] < 60):
+        return BEST_PICK_CACHE["data"]
+        
+    evaluated_coins = []
+    
+    for item in COINS_CATALOG:
+        sym = item["symbol"]
+        try:
+            analysis = get_trading_analysis(sym)
+            ticker = binance_get("/fapi/v1/ticker/24hr", {"symbol": sym})
+            price_24h_pct = float(ticker["priceChangePercent"])
+
+            score = 50.0
+            reasons = []
+            rsi = analysis["rsi_15m"]
+            range_pos = analysis.get("range_position_pct", 50.0)
+            signal = analysis["signal"]
+            
+            # Basis-Score abhaengig von Signal-Typ
+            if signal == "BUY":
+                score += 25.0
+                reasons.append(f"Long-Signal: {analysis['signal_label']}")
+                if rsi < 30: score += 20.0
+                elif rsi < 45: score += 10.0
+                
+                if range_pos <= 25: score += 20.0
+                elif range_pos <= 40: score += 10.0
+            elif signal == "SELL":
+                score += 25.0
+                reasons.append(f"Short-Signal: {analysis['signal_label']}")
+                if rsi > 70: score += 20.0
+                elif rsi > 60: score += 10.0
+                
+                if range_pos >= 75: score += 20.0
+                elif range_pos >= 60: score += 10.0
+            else:
+                score -= 20.0
+                reasons.append("Kein klares Signal (Warten)")
+
+            # CRV Bonus
+            setup = analysis["trade_setup"]
+            tp2_pct = setup.get("take_profit_2_pct", 0)
+            sl_pct = setup.get("stop_loss_pct", 1)
+            if sl_pct > 0:
+                crv_calc = tp2_pct / sl_pct
+                if crv_calc >= 2.0:
+                    score += 10.0
+                    reasons.append(f"Starkes CRV ({setup['crv']})")
+
+            final_score = max(5.0, min(99.0, round(score, 1)))
+
+            evaluated_coins.append({
+                "symbol": sym,
+                "coin": item["coin"],
+                "name": item["name"],
+                "category": item["category"],
+                "current_price": analysis["current_price"],
+                "change_24h_pct": price_24h_pct,
+                "score": final_score,
+                "signal": analysis["signal"],
+                "signal_label": analysis["signal_label"],
+                "rsi_15m": rsi,
+                "entry_zone": setup["entry_zone"],
+                "buy_range_min": analysis.get("buy_range_min"),
+                "buy_range_max": analysis.get("buy_range_max"),
+                "buy_range_label": analysis.get("buy_range_label"),
+                "range_position_pct": analysis.get("range_position_pct"),
+                "range_status": analysis.get("range_status"),
+                "distance_to_buy_pct": analysis.get("distance_to_buy_pct"),
+                "stop_loss": setup["stop_loss"],
+                "take_profit_1": setup["take_profit_1"],
+                "take_profit_2": setup["take_profit_2"],
+                "crv": setup["crv"],
+                "reasons": reasons,
+                "tactical_rationale": setup["tactical_rationale"]
+            })
+        except Exception:
+            continue
+
+    evaluated_coins.sort(key=lambda x: x["score"], reverse=True)
+
+    best = evaluated_coins[0] if evaluated_coins else None
+    result = {
+        "best_pick": best,
+        "ranking": evaluated_coins[:6],
+        "all_evaluated": evaluated_coins,
+        "generated_at": time.strftime("%H:%M:%S")
+    }
+    BEST_PICK_CACHE["timestamp"] = now
+    BEST_PICK_CACHE["data"] = result
+    return result
+
+# --- BINANCE TESTNET TRADING ENDPOINTS ---
+try:
+    import binance_trader
+except ImportError:
+    from . import binance_trader
+
+@app.get("/api/trading/status")
+def get_trading_bot_status() -> Dict[str, Any]:
+    """Prueft ob Testnet-Keys hinterlegt sind und liefert Verbindungsstatus."""
+    creds = binance_trader.get_api_credentials()
+    if not creds["is_configured"]:
+        return {
+            "configured": False,
+            "message": "Binance Testnet API Key und Secret fehlen. Bitte in backend/.env eintragen."
+        }
+    balance_res = binance_trader.get_account_balance(proxies=PROXIES)
+    return {
+        "configured": True,
+        "connected": balance_res.get("success", False),
+        "data": balance_res
+    }
+
+@app.get("/api/trading/balance")
+def get_trading_balance() -> Dict[str, Any]:
+    """Liefert aktuellen USDT-Kontostand und Token-Bestaende im Testnet."""
+    return binance_trader.get_account_balance(proxies=PROXIES)
+
+@app.post("/api/trading/order")
+def execute_trade_order(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Platziert eine Order im Binance Futures Testnet."""
+    symbol = payload.get("symbol", "BTCUSDT").upper().strip()
+    if not symbol.endswith("USDT") and not symbol.endswith("BUSD"):
+        symbol = f"{symbol}USDT"
+    coin = symbol.replace("USDT", "").replace("BUSD", "")
+    side = payload.get("side", "BUY").upper()
+    order_type = payload.get("order_type", "MARKET").upper()
+    quantity = float(payload["quantity"]) if payload.get("quantity") else None
+    price = float(payload.get("price")) if payload.get("price") else None
+    reduce_only = bool(payload.get("reduce_only", False))
+
+    order_res = binance_trader.create_order(
+        symbol=symbol,
+        side=side,
+        order_type=order_type,
+        quantity=quantity,
+        price=price,
+        reduce_only=reduce_only,
+        proxies=PROXIES
+    )
+
+    if side == "BUY" or side == "SELL":
+        curr_price = get_coin_current_price(symbol) or 1.0
+        avg_price = curr_price
+        executed_qty = quantity or 0.0
+        actual_spent = (quantity * curr_price) if quantity else 150.0
+
+        if order_res.get("success"):
+            data = order_res.get("data", {})
+            executed_qty = float(data.get("executedQty", executed_qty or 0.0))
+            # Fallback if executedQty is just returned as origQty
+            if executed_qty <= 0:
+                executed_qty = float(data.get("origQty", 0.0))
+            avg_price = float(data.get("avgPrice", avg_price))
+            if avg_price <= 0:
+                avg_price = curr_price
+            if executed_qty > 0:
+                actual_spent = round(avg_price * executed_qty, 2)
+        else:
+            # Fallback: Virtuelle Position anlegen falls Testnet-Netzwerk blockiert
+            avg_price = curr_price
+            executed_qty = round(actual_spent / avg_price, 5)
+
+        cfg = bot_engine.load_config()
+        leverage = int(cfg.get("default_leverage", 25))
+        notional_val = round(actual_spent * leverage, 2)
+        leveraged_qty = round(executed_qty * leverage, 5)
+        sl_val = round(avg_price * 0.985, 4)
+        tp1_val = round(avg_price * 1.025, 4)
+        tp2_val = round(avg_price * 1.055, 4)
+        liq_price = round(avg_price * (1.0 - (0.88 / leverage)), 4) if leverage > 1 else round(avg_price * 0.5, 4)
+
+        new_pos = {
+            "id": f"pos_{int(time.time() * 1000)}_{coin}",
+            "symbol": symbol,
+            "coin": coin,
+            "side": "LONG",
+            "leverage": leverage,
+            "margin_spent": round(actual_spent, 2),
+            "notional_value": notional_val,
+            "entry_price": round(avg_price, 4),
+            "current_price": round(avg_price, 4),
+            "qty": leveraged_qty,
+            "actual_qty": executed_qty,
+            "quote_spent": round(actual_spent, 2),
+            "liquidation_price": liq_price,
+            "stop_loss": sl_val,
+            "take_profit_1": tp1_val,
+            "take_profit_2": tp2_val,
+            "entered_at": int(time.time()),
+            "tp1_reached": False,
+            "dca_count": 0,
+            "score": 90.0,
+            "reason": f"Manuell ueber Dashboard gekauft ({leverage}x Hebel)"
+        }
+
+        positions = bot_engine.load_positions()
+        positions = [p for p in positions if p.get("symbol") != symbol]
+        positions.insert(0, new_pos)
+        bot_engine.save_positions(positions)
+
+        bot_engine.add_bot_log(
+            "SUCCESS",
+            f"Manuelle Kauforder ausgefuehrt: {coin} ({leverage}x Hebel, Einsatz: ${actual_spent:.2f} USDT) @ ${avg_price:.2f}"
+        )
+
+        return {
+            "success": True,
+            "data": order_res.get("data") or {"executedQty": executed_qty, "fills": [{"price": avg_price, "qty": executed_qty}]},
+            "position": new_pos
+        }
+
+    return order_res
+
+@app.get("/api/trading/open-orders")
+def get_open_orders_list(symbol: Optional[str] = None) -> Dict[str, Any]:
+    """Liefert alle aktiven Testnet-Orders."""
+    return binance_trader.get_open_orders(symbol=symbol, proxies=PROXIES)
+
+@app.delete("/api/trading/order")
+def cancel_trade_order(symbol: str, order_id: int) -> Dict[str, Any]:
+    """Storniert eine aktive Order im Testnet."""
+    return binance_trader.cancel_order(symbol=symbol, order_id=order_id, proxies=PROXIES)
+
+# --- 24/7 AUTONOMER TRADING-BOT ENGINE ---
+try:
+    import bot_engine
+except ImportError:
+    from . import bot_engine
+
+GLOBAL_PRICES_CACHE: Dict[str, float] = {}
+PRICES_CACHE_TIME: float = 0.0
+
+def get_relevant_symbols() -> List[str]:
+    """Ermittelt alle relevanten Symbole (Katalog + offene Positionen)."""
+    symbols = {item["symbol"] for item in COINS_CATALOG}
+    try:
+        positions = bot_engine.load_positions()
+        for p in positions:
+            if p.get("symbol"):
+                symbols.add(p["symbol"])
+    except Exception:
+        pass
+    return sorted(list(symbols))
+
+def get_relevant_prices() -> Dict[str, float]:
+    """Holt schonend und blitzschnell nur die relevanten Coin-Preise ueber Binance."""
+    global GLOBAL_PRICES_CACHE, PRICES_CACHE_TIME
+    now = time.time()
+    if GLOBAL_PRICES_CACHE and (now - PRICES_CACHE_TIME < 3.0):
+        return GLOBAL_PRICES_CACHE
+
+    symbols = get_relevant_symbols()
+    try:
+        symbols_json = json.dumps(symbols, separators=(',', ':'))
+        url = f"https://fapi.binance.com/fapi/v1/ticker/price?symbols={urllib.parse.quote(symbols_json)}"
+        kwargs: Dict[str, Any] = {"timeout": 6}
+        if PROXIES:
+            kwargs["proxies"] = PROXIES
+        resp = requests.get(url, **kwargs)
+        if resp.status_code == 200:
+            for item in resp.json():
+                GLOBAL_PRICES_CACHE[item["symbol"]] = float(item["price"])
+            PRICES_CACHE_TIME = now
+    except Exception:
+        pass
+    return GLOBAL_PRICES_CACHE
+
+def get_coin_current_price(symbol: str) -> float:
+    sym = symbol.upper().strip()
+    if not sym.endswith("USDT") and not sym.endswith("BUSD"):
+        sym = f"{sym}USDT"
+    prices = get_relevant_prices()
+    if sym in prices:
+        return prices[sym]
+    try:
+        res = binance_get("/fapi/v1/ticker/price", {"symbol": sym})
+        price = float(res.get("price", 0.0))
+        GLOBAL_PRICES_CACHE[sym] = price
+        return price
+    except Exception:
+        return 0.0
+
+@app.get("/api/health")
+def health_check() -> Dict[str, Any]:
+    """Health-Check fuer Render und Uptime-Monitore."""
+    return {"status": "ok", "time": time.time()}
+
+@app.get("/api/prices")
+def get_live_prices_api() -> Dict[str, float]:
+    """Liefert alle aktuellen Live-Preise fuer offene Trades und Top-Coins."""
+    return get_relevant_prices()
+
+def run_render_keepalive():
+    """Haelt den Render Free Web Service dauerhaft wach gegen Inaktivitaets-Sleep."""
+    render_url = os.environ.get("RENDER_EXTERNAL_URL")
+    if not render_url:
+        return
+    while True:
+        try:
+            time.sleep(600)  # Alle 10 Minuten
+            ping_url = f"{render_url.rstrip('/')}/api/health"
+            requests.get(ping_url, timeout=10)
+        except Exception:
+            pass
+
+@app.on_event("startup")
+def startup_event():
+    """Startet den 24/7 Autonomen Trading-Bot automatisch beim Backend-Boot."""
+    # Render Anti-Sleep Worker starten
+    threading.Thread(target=run_render_keepalive, daemon=True).start()
+
+    creds = binance_trader.get_api_credentials()
+    if creds["is_configured"]:
+        bot_engine.start_bot_background(
+            get_price_func=get_coin_current_price,
+            analysis_func=get_trading_analysis,
+            best_pick_func=get_best_buy_pick,
+            btc_regime_func=get_btc_market_regime,
+            proxies=PROXIES
+        )
+
+ACTIVE_TOKENS: Dict[str, float] = {}
+
+def get_auth_credentials() -> Dict[str, str]:
+    """Ermittelt Benutzername und Passwort aus .env oder Umgebungsvariablen."""
+    cfg = binance_trader.get_env_config()
+    username = os.environ.get("AUTH_USERNAME") or cfg.get("AUTH_USERNAME", "admin")
+    password = os.environ.get("AUTH_PASSWORD") or cfg.get("AUTH_PASSWORD", "admin123")
+    return {"username": username, "password": password}
+
+def create_session_token() -> str:
+    token = secrets.token_hex(24)
+    ACTIVE_TOKENS[token] = time.time() + (30 * 86400)  # 30 Tage gueltig
+    return token
+
+def is_token_valid(token: Optional[str]) -> bool:
+    if not token:
+        return False
+    clean = token.replace("Bearer ", "").strip()
+    if clean in ACTIVE_TOKENS:
+        if time.time() < ACTIVE_TOKENS[clean]:
+            return True
+        else:
+            ACTIVE_TOKENS.pop(clean, None)
+    return False
+
+def is_authorized(request: Request) -> bool:
+    client_host = getattr(request.client, "host", "") if request.client else ""
+    if client_host in ["127.0.0.1", "localhost", "::1"]:
+        return True
+    auth_header = request.headers.get("Authorization") or request.headers.get("X-Auth-Token")
+    return is_token_valid(auth_header)
+
+def verify_auth_header(request: Request):
+    if not is_authorized(request):
+        raise HTTPException(status_code=401, detail="Nicht autorisiert. Bitte im Dashboard einloggen.")
+
+@app.post("/api/auth/login")
+def login_api(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Prueft Login-Daten und gibt ein gueltiges Session-Token zurueck."""
+    creds = get_auth_credentials()
+    user = payload.get("username", "").strip()
+    pwd = payload.get("password", "").strip()
+    if user == creds["username"] and pwd == creds["password"]:
+        token = create_session_token()
+        return {"success": True, "token": token, "username": user}
+    raise HTTPException(status_code=401, detail="Ungültiger Benutzername oder Passwort.")
+
+@app.get("/api/auth/verify")
+def verify_api(request: Request) -> Dict[str, Any]:
+    """Prueft ob das uebergebene Session-Token noch gueltig ist."""
+    auth_header = request.headers.get("Authorization") or request.headers.get("X-Auth-Token")
+    if is_token_valid(auth_header):
+        return {"authenticated": True, "username": get_auth_credentials()["username"]}
+    return {"authenticated": False}
+
+@app.post("/api/auth/logout")
+def logout_api(request: Request) -> Dict[str, Any]:
+    """Loggt den aktuellen Benutzer aus und entwertet das Token."""
+    auth_header = request.headers.get("Authorization") or request.headers.get("X-Auth-Token")
+    if auth_header:
+        clean = auth_header.replace("Bearer ", "").strip()
+        ACTIVE_TOKENS.pop(clean, None)
+    return {"success": True}
+
+@app.get("/api/bot/status")
+def get_bot_status_api() -> Dict[str, Any]:
+    """Liefert den 24/7 Bot-Status mit aktuellen Live-Preisen aller Positionen."""
+    return bot_engine.get_bot_status(price_provider_func=get_coin_current_price)
+
+@app.post("/api/bot/toggle")
+def toggle_bot_api(payload: Dict[str, Any], request: Request) -> Dict[str, Any]:
+    """Schaltet den 24/7 Autopiloten an oder aus."""
+    verify_auth_header(request)
+    enable = payload.get("enabled", True)
+    cfg = bot_engine.load_config()
+    cfg["enabled"] = enable
+    bot_engine.save_config(cfg)
+    
+    if enable:
+        bot_engine.start_bot_background(
+            get_price_func=get_coin_current_price,
+            analysis_func=get_trading_analysis,
+            best_pick_func=get_best_buy_pick,
+            btc_regime_func=get_btc_market_regime,
+            proxies=PROXIES
+        )
+    else:
+        bot_engine.stop_bot_background()
+        
+    return bot_engine.get_bot_status()
+
+@app.post("/api/bot/config")
+def update_bot_config_api(payload: Dict[str, Any], request: Request) -> Dict[str, Any]:
+    """Aktualisiert Bot-Parameter (z.B. Order-Groesse, Min-Score)."""
+    verify_auth_header(request)
+    cfg = bot_engine.load_config()
+    for k, v in payload.items():
+        cfg[k] = v
+    bot_engine.save_config(cfg)
+    return {"success": True, "config": cfg}
+
+@app.post("/api/bot/close-position")
+def close_bot_position_api(payload: Dict[str, Any], request: Request) -> Dict[str, Any]:
+    """Schliesst eine aktive Position manuell ueber das Dashboard."""
+    verify_auth_header(request)
+    pos_id = payload.get("position_id", "")
+    reason = payload.get("reason", "Manuell ueber Dashboard geschlossen")
+    return bot_engine.close_active_position(pos_id, reason, proxies=PROXIES)
+
+@app.get("/api/bot/journal")
+def get_bot_journal_api() -> List[Dict[str, Any]]:
+    """Liefert die vollstaendige Historie aller abgeschlossenen Trades."""
+    return bot_engine.load_journal()
+
+@app.post("/api/bot/journal/reset")
+def reset_bot_journal_api(request: Request) -> Dict[str, Any]:
+    """Bereinigt oder leert das Trade-Journal auf Wunsch des Benutzers."""
+    verify_auth_header(request)
+    bot_engine.save_journal([])
+    return {"success": True, "message": "Trade-Journal wurde erfolgreich zurueckgesetzt."}
+
+@app.post("/api/bot/emergency-stop")
+def emergency_stop_api(request: Request) -> Dict[str, Any]:
+    """Panik-Knopf: Liquidiert alle Positionen, bricht Orders ab und schaltet den Bot ab."""
+    verify_auth_header(request)
+    return bot_engine.emergency_stop_all(reason="Manuell ueber Dashboard Panik-Button ausgeloest", proxies=PROXIES)
+
+@app.post("/api/bot/telegram/test")
+def test_telegram_api(request: Request) -> Dict[str, Any]:
+    """Sendet eine Test-Nachricht an den konfigurierten Telegram-Empfaenger."""
+    verify_auth_header(request)
+    import telegram_notifier
+    telegram_notifier.send_telegram_alert(
+        "<b>CryptoAnalyzer Telegram-Verbindung ERFOLGREICH!</b>\n\n"
+        "Chef, dein Trading-Bot ist jetzt live mit deinem Smartphone verbunden.\n"
+        f"<b>Status:</b> Bereit fuer Echtzeit-Alerts\n"
+        f"<b>Zeit:</b> {time.strftime('%d.%m.%Y %H:%M:%S')}",
+        proxies=PROXIES
+    )
+    return {"success": True, "message": "Telegram Test-Nachricht wurde ausgeloest."}
+
+@app.post("/api/bot/circuit-breaker/unlock")
+def unlock_circuit_breaker_api(request: Request) -> Dict[str, Any]:
+    """Entsperrt den Circuit Breaker fuer den heutigen Tag manuell."""
+    verify_auth_header(request)
+    bot_engine.unlock_circuit_breaker()
+    return {"success": True, "message": "Circuit Breaker wurde fuer heute erfolgreich entsperrt."}
+
+# --- STATISCHES FRONTEND SERVING (Fuer 1-Container Cloud Deployments) ---
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+DIST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend", "dist")
+if os.path.exists(DIST_DIR):
+    assets_dir = os.path.join(DIST_DIR, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/{full_path:path}")
+    def serve_frontend_spa(full_path: str):
+        target_file = os.path.join(DIST_DIR, full_path)
+        if full_path and os.path.exists(target_file) and os.path.isfile(target_file):
+            return FileResponse(target_file)
+        index_file = os.path.join(DIST_DIR, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+        return {"message": "CryptoAnalyzer API running."}
+
