@@ -5,34 +5,49 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Our Space ❤️</title>
     <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#fdfbfb">
+    <meta name="theme-color" content="#fff5f5">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Süße, abgerundete Schriftarten -->
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Pacifico&display=swap" rel="stylesheet">
 </head>
 <body>
+    <!-- Dynamischer Hintergrund-Blob -->
+    <div class="bg-shape"></div>
+
     <!-- App Header -->
     <header class="app-header">
         <div class="header-top">
             <a href="/" class="back-btn">
                 <span class="back-icon">🔙</span> Home
             </a>
+            <div class="header-avatar">❤️</div>
         </div>
-        <h1 id="header-title">Unser Kalender</h1>
+        
+        <div class="hero-section">
+            <h1 id="header-title" class="hero-title">Unser Kalender</h1>
+            <p id="header-subtitle" class="hero-subtitle">Macht euch schöne Pläne!</p>
+        </div>
     </header>
 
     <!-- Main Content Area -->
     <main class="app-content">
-        
+
         <!-- View: Kalender -->
         <section id="view-calendar" class="view active">
+            <!-- Countdown Widget -->
+            <div id="countdown-widget" class="card countdown-card" onclick="openCountdownModal()" style="background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%); color: white; text-align: center; cursor: pointer;">
+                <div class="countdown-title" id="cd-title" style="font-weight: 700; font-size: 1.2rem;">Worauf freuen wir uns?</div>
+                <div class="countdown-timer" id="cd-timer" style="font-size: 2rem; font-weight: 800; margin-top: 0.5rem;">Klick mich ⏳</div>
+            </div>
+
             <div class="card add-card" onclick="openEventModal()">
                 <div class="add-icon">+</div>
                 <span>Neues Date eintragen 💕</span>
             </div>
-            
+
             <div id="events-list" class="list-container">
                 <!-- Events werden per JS geladen -->
                 <div class="placeholder">Lade unsere Pläne...</div>
@@ -43,6 +58,28 @@
         <section id="view-meals" class="view">
             <div class="meal-grid" id="meal-grid">
                 <!-- Tage werden per JS geladen -->
+            </div>
+        </section>
+
+        <!-- View: Shopping List -->
+        <section id="view-shopping" class="view">
+            <div class="card add-note-card">
+                <input type="text" id="new-shopping-input" placeholder="Was brauchen wir?">
+                <button onclick="saveShoppingItem()" class="send-note-btn">🛒</button>
+            </div>
+            <div id="shopping-list" class="notes-container">
+                <!-- Shopping Items -->
+            </div>
+        </section>
+
+        <!-- View: Bucket List -->
+        <section id="view-bucket" class="view">
+            <div class="card add-note-card">
+                <input type="text" id="new-bucket-input" placeholder="Ein neuer Traum...">
+                <button onclick="saveBucketItem()" class="send-note-btn">✨</button>
+            </div>
+            <div id="bucket-list" class="notes-container">
+                <!-- Bucket List Items -->
             </div>
         </section>
 
@@ -65,9 +102,17 @@
             <span class="nav-icon">📅</span>
             <span class="nav-label">Kalender</span>
         </button>
+        <button class="nav-item" onclick="switchTab('shopping')">
+            <span class="nav-icon">🛒</span>
+            <span class="nav-label">Einkauf</span>
+        </button>
         <button class="nav-item" onclick="switchTab('meals')">
             <span class="nav-icon">🍕</span>
             <span class="nav-label">Essen</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('bucket')">
+            <span class="nav-icon">✨</span>
+            <span class="nav-label">Träume</span>
         </button>
         <button class="nav-item" onclick="switchTab('notes')">
             <span class="nav-icon">📌</span>
@@ -84,6 +129,19 @@
             <div class="modal-actions">
                 <button class="btn btn-cancel" onclick="closeEventModal()">Abbrechen</button>
                 <button class="btn btn-save" onclick="saveEvent()">Speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Countdown eintragen -->
+    <div id="countdown-modal" class="modal">
+        <div class="modal-content">
+            <h2>Worauf freuen wir uns? ⏳</h2>
+            <input type="text" id="cd-input-title" placeholder="Z.B. Urlaub">
+            <input type="date" id="cd-input-date">
+            <div class="modal-actions">
+                <button class="btn btn-cancel" onclick="closeCountdownModal()">Abbrechen</button>
+                <button class="btn btn-save" onclick="saveCountdown()">Speichern</button>
             </div>
         </div>
     </div>
