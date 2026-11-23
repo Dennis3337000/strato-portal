@@ -1,5 +1,9 @@
 version: '3.8'
 
+networks:
+  shared-network:
+    name: shared-strato-network
+
 services:
   # 1. Der Reverse Proxy (Nginx) verteilt die Anfragen
   proxy:
@@ -7,6 +11,8 @@ services:
     ports:
       - "80:80"
       # - "443:443" # Falls du später SSL/HTTPS hinzufügen willst
+    networks:
+      - shared-network
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./landing-page:/usr/share/nginx/html:ro
@@ -17,6 +23,8 @@ services:
   couple-app:
     build: 
       context: ./couple-app
+    networks:
+      - shared-network
     restart: unless-stopped
     volumes:
       # Hier wird die SQLite Datenbank persistent gespeichert
