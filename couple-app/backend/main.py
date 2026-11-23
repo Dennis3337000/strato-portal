@@ -41,6 +41,13 @@ def init_db():
             meal_name TEXT NOT NULL
         )
     ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -55,6 +62,40 @@ class Event(BaseModel):
 class Meal(BaseModel):
     day: str
     meal_name: str
+
+class Note(BaseModel):
+    content: str
+
+# --- API Routen: Notes ---
+@app.get("/api/notes")
+def get_notes():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT id, content, created_at FROM notes ORDER BY id DESC")
+    notes = [{"id": row[0], "content": row[1], "created_at": row[2]} for row in c.fetchall()]
+    conn.close()
+    return notes
+
+@app.post("/api/notes")
+def add_note(note: Note):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    from datetime import datetime
+    now = datetime.now().strftime("%d.%m.%Y %H:%M")
+    c.execute("INSERT INTO notes (content, created_at) VALUES (?, ?)", (note.content, now))
+    conn.commit()
+    note_id = c.lastrowid
+    conn.close()
+    return {"id": note_id, "content": note.content, "created_at": now}
+
+@app.delete("/api/notes/{note_id}")
+def delete_note(note_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+    conn.commit()
+    conn.close()
+    return {"success": True}
 
 # --- API Routen ---
 @app.get("/api/events")

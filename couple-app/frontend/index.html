@@ -15,6 +15,11 @@
 <body>
     <!-- App Header -->
     <header class="app-header">
+        <div class="header-top">
+            <a href="/" class="back-btn">
+                <span class="back-icon">🔙</span> Home
+            </a>
+        </div>
         <h1 id="header-title">Unser Kalender</h1>
     </header>
 
@@ -25,7 +30,7 @@
         <section id="view-calendar" class="view active">
             <div class="card add-card" onclick="openEventModal()">
                 <div class="add-icon">+</div>
-                <span>Neues Date eintragen</span>
+                <span>Neues Date eintragen 💕</span>
             </div>
             
             <div id="events-list" class="list-container">
@@ -41,6 +46,17 @@
             </div>
         </section>
 
+        <!-- View: Pinnwand -->
+        <section id="view-notes" class="view">
+            <div class="card add-note-card">
+                <input type="text" id="new-note-input" placeholder="Nachricht schreiben...">
+                <button onclick="saveNote()" class="send-note-btn">💌</button>
+            </div>
+            <div id="notes-list" class="notes-container">
+                <!-- Notizen werden geladen -->
+            </div>
+        </section>
+
     </main>
 
     <!-- Bottom Navigation -->
@@ -52,6 +68,10 @@
         <button class="nav-item" onclick="switchTab('meals')">
             <span class="nav-icon">🍕</span>
             <span class="nav-label">Essen</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('notes')">
+            <span class="nav-icon">📌</span>
+            <span class="nav-label">Pinnwand</span>
         </button>
     </nav>
 
