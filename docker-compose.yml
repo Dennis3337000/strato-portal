@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  # 1. Der Reverse Proxy (Nginx) verteilt die Anfragen
+  proxy:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      # - "443:443" # Falls du später SSL/HTTPS hinzufügen willst
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./landing-page:/usr/share/nginx/html:ro
+    depends_on:
+      - couple-app
+
+  # 2. Die Couple App (Backend + PWA Frontend in einem)
+  couple-app:
+    build: 
+      context: ./couple-app
+    restart: unless-stopped
+    volumes:
+      # Hier wird die SQLite Datenbank persistent gespeichert
+      - couple-app-data:/app/data
+
+volumes:
+  couple-app-data:

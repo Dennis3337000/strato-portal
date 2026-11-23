@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Our Space ❤️</title>
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#fdfbfb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- App Header -->
+    <header class="app-header">
+        <h1 id="header-title">Unser Kalender</h1>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="app-content">
+        
+        <!-- View: Kalender -->
+        <section id="view-calendar" class="view active">
+            <div class="card add-card" onclick="openEventModal()">
+                <div class="add-icon">+</div>
+                <span>Neues Date eintragen</span>
+            </div>
+            
+            <div id="events-list" class="list-container">
+                <!-- Events werden per JS geladen -->
+                <div class="placeholder">Lade unsere Pläne...</div>
+            </div>
+        </section>
+
+        <!-- View: Essensplan -->
+        <section id="view-meals" class="view">
+            <div class="meal-grid" id="meal-grid">
+                <!-- Tage werden per JS geladen -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav">
+        <button class="nav-item active" onclick="switchTab('calendar')">
+            <span class="nav-icon">📅</span>
+            <span class="nav-label">Kalender</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('meals')">
+            <span class="nav-icon">🍕</span>
+            <span class="nav-label">Essen</span>
+        </button>
+    </nav>
+
+    <!-- Modal: Neues Event -->
+    <div id="event-modal" class="modal">
+        <div class="modal-content">
+            <h2>Was planen wir? 💕</h2>
+            <input type="text" id="event-title" placeholder="Titel (z.B. Kino)">
+            <input type="date" id="event-date">
+            <div class="modal-actions">
+                <button class="btn btn-cancel" onclick="closeEventModal()">Abbrechen</button>
+                <button class="btn btn-save" onclick="saveEvent()">Speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Essen eintragen -->
+    <div id="meal-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="meal-modal-title">Essen für Montag</h2>
+            <input type="hidden" id="meal-day">
+            <input type="text" id="meal-name" placeholder="Was gibt's Leckeres?">
+            <div class="modal-actions">
+                <button class="btn btn-cancel" onclick="closeMealModal()">Abbrechen</button>
+                <button class="btn btn-save" onclick="saveMeal()">Speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
