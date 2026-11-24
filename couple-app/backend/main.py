@@ -7,6 +7,9 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 import sqlite3
 import os
+import base64
+import uuid
+import time
 
 app = FastAPI(title="Couple App API")
 
@@ -34,6 +37,9 @@ async def add_cache_control_header(request, call_next):
 DB_DIR = os.getenv("DATA_DIR", "/app/data" if os.path.exists("/app") else os.path.join(os.path.dirname(__file__), "data"))
 os.makedirs(DB_DIR, exist_ok=True)
 DB_FILE = os.path.join(DB_DIR, "couple_data.db")
+UPLOADS_DIR = os.path.join(DB_DIR, "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+app.mount("/api/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -876,12 +882,34 @@ def add_photo(photo: PhotoCreate):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     now = datetime.now().strftime("%d.%m.%Y")
+
+    image_url = photo.image_data
+    # Wenn ein Base64-Bild geschickt wird, decodieren und als echte Bilddatei auf der Festplatte speichern!
+    if photo.image_data.startswith("data:image"):
+        try:
+            header, encoded = photo.image_data.split(",", 1)
+            ext = "jpg"
+            if "png" in header:
+                ext = "png"
+            elif "webp" in header:
+                ext = "webp"
+
+            filename = f"photo_{int(time.time())}_{uuid.uuid4().hex[:6]}.{ext}"
+            filepath = os.path.join(UPLOADS_DIR, filename)
+            with open(filepath, "wb") as f:
+                f.write(base64.b64decode(encoded))
+
+            image_url = f"api/uploads/{filename}"
+        except Exception as e:
+            print("Fehler beim Speichern der Bilddatei auf Festplatte:", e)
+            image_url = photo.image_data
+
     c.execute("INSERT INTO photos (title, image_data, author, likes, created_at) VALUES (?, ?, ?, 0, ?)",
-              (photo.title or "", photo.image_data, photo.author, now))
+              (photo.title or "", image_url, photo.author, now))
     conn.commit()
     new_id = c.lastrowid
     conn.close()
-    return {"id": new_id, "title": photo.title or "", "image_data": photo.image_data, "author": photo.author, "likes": 0, "created_at": now}
+    return {"id": new_id, "title": photo.title or "", "image_data": image_url, "author": photo.author, "likes": 0, "created_at": now}
 
 @app.post("/api/photos/{photo_id}/like")
 def like_photo(photo_id: int):
@@ -898,6 +926,16 @@ def like_photo(photo_id: int):
 def delete_photo(photo_id: int):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
+    c.execute("SELECT image_data FROM photos WHERE id = ?", (photo_id,))
+    row = c.fetchone()
+    if row and row[0] and row[0].startswith("api/uploads/"):
+        filename = row[0].replace("api/uploads/", "")
+        filepath = os.path.join(UPLOADS_DIR, filename)
+        if os.path.exists(filepath):
+            try:
+                os.remove(filepath)
+            except Exception:
+                pass
     c.execute("DELETE FROM photos WHERE id = ?", (photo_id,))
     conn.commit()
     conn.close()

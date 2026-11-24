@@ -201,7 +201,7 @@ def test_new_features():
     print("  -> Letters OK")
 
     print("[TEST] Photos...")
-    p_res = add_photo(PhotoCreate(title="Urlaub", image_data="data:image/png;base64,sample", author="Partner A"))
+    p_res = add_photo(PhotoCreate(title="Urlaub", image_data="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", author="Partner A"))
     p_id = p_res["id"]
     like_photo(p_id)
     photos = get_photos()
