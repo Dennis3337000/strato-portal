@@ -52,9 +52,14 @@ export default function Header({ profile, role, daysTogether, onOpenSettings, on
         <h1 className="text-lg font-black gradient-text tracking-tight truncate px-2">
           {profile.partner_a_name || 'Partner A'} & {profile.partner_b_name || 'Partner B'}
         </h1>
-        <p className="text-[10px] font-bold text-gray-400 truncate">
-          Verbunden mit <span className="text-gray-600 font-extrabold">{otherPartnerName}</span> 💕
-        </p>
+        <div className="flex items-center justify-center gap-1.5 mt-0.5">
+          <p className="text-[10px] font-bold text-gray-400 truncate">
+            Verbunden mit <span className="text-gray-600 font-extrabold">{otherPartnerName}</span> 💕
+          </p>
+          <span className="bg-gradient-to-r from-pink-500 to-purple-500 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full uppercase tracking-wider">
+            v3.0
+          </span>
+        </div>
       </div>
     </header>
   );
