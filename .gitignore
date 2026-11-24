@@ -2,3 +2,8 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.log
+*.db
+couple-app/backend/data/
+couple-app/client/node_modules/
+couple-app/client/dist/
+couple-link/

@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  coupleapp:
+    build: .
+    container_name: coupleapp
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - coupleapp-data:/app/data
+    environment:
+      - DATA_DIR=/app/data
+    networks:
+      - default
+
+volumes:
+  coupleapp-data:

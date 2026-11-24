@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary-light: #fecfef;
+  --color-primary: #ff9a9e;
+  --color-primary-dark: #f48fb1;
+  --color-secondary: #a18cd1;
+  --color-background: #fdfbfb;
+  --color-surface: #ffffff;
+  --color-text-main: #4a4a4a;
+  --color-text-muted: #8e8e8e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  background-color: var(--color-background);
+  color: var(--color-text-main);
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  font-family: 'Nunito', system-ui, -apple-system, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Hide scrollbar but keep scrollability */
+::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+  background: transparent;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gradient-bg {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+}
+
+@keyframes blob {
+  0% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(15px, -25px) scale(1.05); }
+  66% { transform: translate(-10px, 10px) scale(0.95); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+.animate-blob {
+  animation: blob 8s infinite ease-in-out;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-in {
+  animation: slideUpFade 0.35s ease-out forwards;
+}
+
+/* Safe area padding for mobile bottom bar */
+.safe-bottom-nav {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
