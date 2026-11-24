@@ -108,7 +108,7 @@ function setLocal<T>(key: string, value: T): void {
 async function fetchWithFallback<T>(endpoint: string, options?: RequestInit, fallbackKey?: string, defaultVal?: T): Promise<T> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000); // 2s timeout
+    const timeout = setTimeout(() => controller.abort(), 8000); // 8s timeout for reliable mobile connections
     const res = await fetch(`${BASE_URL}/${endpoint}`, {
       ...options,
       signal: controller.signal,
@@ -613,7 +613,26 @@ export const api = {
 
   // Photos (Fotowand & Momente)
   async getPhotos(): Promise<PhotoItem[]> {
-    return await fetchWithFallback<PhotoItem[]>('photos', undefined, 'photos', [
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      const res = await fetch(`${BASE_URL}/photos`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setLocal('photos', data);
+          return data;
+        }
+      }
+    } catch (e) {
+      console.warn('Backend /api/photos fetch failed:', e);
+    }
+
+    const cached = getLocal<PhotoItem[]>('photos', []);
+    if (cached.length > 0) return cached;
+
+    return [
       {
         id: 1,
         title: 'Kuscheliger Sonntag ☕❤️',
@@ -630,15 +649,10 @@ export const api = {
         likes: 8,
         created_at: 'Letzte Woche'
       }
-    ]);
+    ];
   },
 
   async addPhoto(photo: Omit<PhotoItem, 'id' | 'likes' | 'created_at'>): Promise<PhotoItem> {
-    const list = getLocal<PhotoItem[]>('photos', []);
-    const now = 'Heute';
-    const newItem: PhotoItem = { id: Date.now(), ...photo, likes: 0, created_at: now };
-    setLocal('photos', [newItem, ...list]);
-
     try {
       const res = await fetch(`${BASE_URL}/photos`, {
         method: 'POST',
@@ -647,11 +661,17 @@ export const api = {
       });
       if (res.ok) {
         const created = await res.json();
-        setLocal('photos', [created, ...list]);
+        const list = getLocal<PhotoItem[]>('photos', []);
+        setLocal('photos', [created, ...list.filter(p => p.id !== created.id)]);
         return created;
+      } else {
+        const errText = await res.text();
+        throw new Error(`Serverfehler (${res.status}): ${errText}`);
       }
-    } catch {}
-    return newItem;
+    } catch (e: any) {
+      console.error('Photo save error:', e);
+      throw e;
+    }
   },
 
   async likePhoto(id: number): Promise<number> {

@@ -25,6 +25,7 @@ export default function PhotoWall({
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [photoCaption, setPhotoCaption] = useState('');
   const [selectedFullscreenPhoto, setSelectedFullscreenPhoto] = useState<PhotoItem | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const currentAuthorName = role === 'Partner A' ? (profile.partner_a_name || 'Partner A') : (profile.partner_b_name || 'Partner B');
@@ -52,11 +53,11 @@ export default function PhotoWall({
     reader.onload = (event) => {
       const img = new window.Image();
       img.onload = () => {
-        // Resize onto canvas to optimize file size (max 1200px)
+        // Resize onto canvas to optimize file size (max 800px for crisp mobile display & fast uploads)
         const canvas = document.createElement('canvas');
         let width = img.width;
         let height = img.height;
-        const maxDim = 1200;
+        const maxDim = 800;
 
         if (width > height && width > maxDim) {
           height = Math.round((height * maxDim) / width);
@@ -71,8 +72,8 @@ export default function PhotoWall({
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          // Compress to JPEG 82% quality (usually 100-180 KB)
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+          // Compress to JPEG 72% quality (produces crisp ~60-90 KB images that never fail)
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.72);
           setPreviewImage(compressedDataUrl);
           setShowUploadModal(true);
         }
@@ -87,13 +88,18 @@ export default function PhotoWall({
     }
   };
 
-  const handleConfirmUpload = (e: React.FormEvent) => {
+  const handleConfirmUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!previewImage) return;
-    onAddPhoto(photoCaption.trim() || 'Schöner Moment 💕', previewImage, currentAuthorName);
-    setPreviewImage(null);
-    setPhotoCaption('');
-    setShowUploadModal(false);
+    if (!previewImage || isUploading) return;
+    setIsUploading(true);
+    try {
+      await onAddPhoto(photoCaption.trim() || 'Schöner Moment 💕', previewImage, currentAuthorName);
+      setPreviewImage(null);
+      setPhotoCaption('');
+      setShowUploadModal(false);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const nextSlide = () => setCurrentSlideIdx(prev => (prev + 1) % photos.length);
@@ -317,9 +323,10 @@ export default function PhotoWall({
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 rounded-xl font-black text-white bg-gradient-to-r from-pink-500 to-rose-400 text-xs shadow-md"
+                  disabled={isUploading}
+                  className="flex-1 py-2 rounded-xl font-black text-white bg-gradient-to-r from-pink-500 to-rose-400 text-xs shadow-md disabled:opacity-75 flex items-center justify-center gap-1.5"
                 >
-                  Veröffentlichen 💕
+                  {isUploading ? 'Wird gespeichert...' : 'Veröffentlichen 💕'}
                 </button>
               </div>
             </form>

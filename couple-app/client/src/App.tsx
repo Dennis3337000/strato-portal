@@ -352,9 +352,13 @@ export default function App() {
 
   // Photo actions
   const handleAddPhoto = async (title: string, imageData: string, author: string) => {
-    const created = await api.addPhoto({ title, image_data: imageData, author });
-    setPhotos(prev => [created, ...prev]);
-    showToast('Foto auf Fotowand gepinnt! 📸💕');
+    try {
+      const created = await api.addPhoto({ title, image_data: imageData, author });
+      setPhotos(prev => [created, ...prev.filter(p => p.id !== created.id)]);
+      showToast('Foto auf Fotowand gepinnt! 📸💕');
+    } catch (err: any) {
+      showToast(`⚠️ Upload-Fehler: ${err.message || 'Konnte nicht gespeichert werden'}`);
+    }
   };
 
   const handleLikePhoto = async (id: number) => {
