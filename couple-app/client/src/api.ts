@@ -21,7 +21,7 @@ const DEFAULT_PROFILE: ProfileData = {
   start_date: '',
   partner_a_birthday: '',
   partner_b_birthday: '',
-  partner_a_city: 'Berlin',
+  partner_a_city: 'Dresden',
   partner_b_city: 'München',
   hugs_count: 0,
   setup_completed: false
@@ -76,8 +76,8 @@ const DEFAULT_COUNTDOWN: CountdownItem = {
 const DEFAULT_LOCATIONS: Record<string, LiveLocation> = {
   'Partner A': {
     partner: 'Partner A',
-    latitude: 52.5200,
-    longitude: 13.4050,
+    latitude: 51.0504,
+    longitude: 13.7373,
     accuracy: 8,
     speed: 0,
     heading: 0,

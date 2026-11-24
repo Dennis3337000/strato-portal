@@ -15,7 +15,9 @@ import {
   Navigation,
   Check,
   X,
-  RefreshCw
+  RefreshCw,
+  Search,
+  Building
 } from 'lucide-react';
 import type { LiveLocation, ProfileData, UserRole } from '../types';
 
@@ -30,6 +32,21 @@ interface LiveMapViewProps {
   onRequestGPS: () => void;
   onSendManualLocation: (lat: number, lon: number, speed?: number, targetPartner?: string) => void;
 }
+
+const POPULAR_LOCATIONS = [
+  { name: '🏢 Bosch Werk Dresden', lat: 51.1278, lon: 13.7745, desc: 'Robert-Bosch-Ring 1' },
+  { name: '📍 Dresden Zentrum', lat: 51.0504, lon: 13.7373, desc: 'Altmarkt / Frauenkirche' },
+  { name: '📍 Leipzig', lat: 51.3397, lon: 12.3731, desc: 'Hauptbahnhof' },
+  { name: '📍 Chemnitz', lat: 50.8278, lon: 12.9214, desc: 'Zentrum' },
+  { name: '📍 Berlin', lat: 52.5200, lon: 13.4050, desc: 'Alexanderplatz' },
+  { name: '📍 München', lat: 48.1351, lon: 11.5820, desc: 'Marienplatz' },
+  { name: '📍 Stuttgart', lat: 48.7758, lon: 9.1829, desc: 'Schlossplatz / Bosch Schillerhöhe' },
+  { name: '📍 Hamburg', lat: 53.5511, lon: 9.9937, desc: 'Jungfernstieg' },
+  { name: '📍 Frankfurt', lat: 50.1109, lon: 8.6821, desc: 'Hauptwache' },
+  { name: '📍 Köln', lat: 50.9375, lon: 6.9603, desc: 'Dom' },
+  { name: '📍 Wien', lat: 48.2082, lon: 16.3738, desc: 'Stephansplatz' },
+  { name: '📍 Zürich', lat: 47.3769, lon: 8.5417, desc: 'Hauptbahnhof' }
+];
 
 function calculateDistanceInKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
@@ -62,6 +79,16 @@ export default function LiveMapView({
   const polylineRef = useRef<L.Polyline | null>(null);
 
   const [pendingPin, setPendingPin] = useState<{ lat: number; lon: number } | null>(null);
+  const [showCitySearch, setShowCitySearch] = useState(false);
+  const [searchFilter, setSearchFilter] = useState('');
+
+  const handleSetPreset = (lat: number, lon: number) => {
+    onSendManualLocation(lat, lon, 0, currentRole);
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.flyTo([lat, lon], 14, { duration: 1 });
+    }
+    setShowCitySearch(false);
+  };
 
   const currentRole = role || 'Partner A';
   const partnerRole = currentRole === 'Partner A' ? 'Partner B' : 'Partner A';
@@ -315,6 +342,32 @@ export default function LiveMapView({
         )}
       </div>
 
+      {/* Quick City Presets (Perfect for office/VPN users where GPS resolves to proxy) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+        <span className="text-[10px] font-extrabold text-gray-400 shrink-0">Schnellwahl:</span>
+        <button
+          type="button"
+          onClick={() => handleSetPreset(51.1278, 13.7745)}
+          className="bg-pink-100 hover:bg-pink-200 text-pink-700 px-2.5 py-1 rounded-full text-[10px] font-extrabold shrink-0 active:scale-95 transition-all shadow-xs flex items-center gap-1"
+        >
+          <Building size={11} /> Bosch Dresden
+        </button>
+        <button
+          type="button"
+          onClick={() => handleSetPreset(51.0504, 13.7373)}
+          className="bg-purple-100 hover:bg-purple-200 text-purple-700 px-2.5 py-1 rounded-full text-[10px] font-extrabold shrink-0 active:scale-95 transition-all shadow-xs flex items-center gap-1"
+        >
+          📍 Dresden Zentrum
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowCitySearch(true)}
+          className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 active:scale-95 transition-all flex items-center gap-1"
+        >
+          <Search size={11} /> Stadt wählen
+        </button>
+      </div>
+
       {/* Interactive Leaflet Map Container */}
       <div className="relative w-full h-[320px] rounded-3xl overflow-hidden shadow-sm border border-pink-100">
         <div ref={mapContainerRef} className="w-full h-full z-0" />
@@ -473,6 +526,54 @@ export default function LiveMapView({
           <Play size={12} fill="currentColor" /> Test-Fahrt
         </button>
       </div>
+
+      {/* City Search Modal */}
+      {showCitySearch && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-4 shadow-2xl space-y-3 max-h-[85dvh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+              <h3 className="text-sm font-black text-gray-800">Standort auswählen 📍</h3>
+              <button
+                type="button"
+                onClick={() => setShowCitySearch(false)}
+                className="p-1 text-gray-400 hover:text-gray-700 rounded-full"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Stadt suchen (z.B. Dresden)..."
+                value={searchFilter}
+                onChange={e => setSearchFilter(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-8 pr-3 py-2 text-xs font-semibold focus:outline-none focus:border-pink-500"
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
+              {POPULAR_LOCATIONS
+                .filter(loc => loc.name.toLowerCase().includes(searchFilter.toLowerCase()) || loc.desc.toLowerCase().includes(searchFilter.toLowerCase()))
+                .map(loc => (
+                  <button
+                    key={loc.name}
+                    type="button"
+                    onClick={() => handleSetPreset(loc.lat, loc.lon)}
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-pink-50/70 border border-gray-100 transition-colors flex items-center justify-between"
+                  >
+                    <div>
+                      <span className="text-xs font-bold text-gray-800 block">{loc.name}</span>
+                      <span className="text-[10px] text-gray-400 block">{loc.desc}</span>
+                    </div>
+                    <span className="text-pink-500 text-xs font-bold">Wählen →</span>
+                  </button>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

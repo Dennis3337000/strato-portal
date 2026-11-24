@@ -147,7 +147,7 @@ def init_db():
         "partner_a_name": "Partner A",
         "partner_b_name": "Partner B",
         "start_date": "2023-05-12",
-        "partner_a_city": "Berlin",
+        "partner_a_city": "Dresden",
         "partner_b_city": "München",
         "hugs_count": "12"
     }
@@ -161,11 +161,15 @@ def init_db():
     c.execute("INSERT OR IGNORE INTO moods (partner, emoji, text, updated_at) VALUES (?, ?, ?, ?)",
               ("Partner B", "🥰", "Vermisse dich!", now))
 
-    # Standard Standorte setzen falls leer
+    # Standard Standorte setzen falls leer (Dresden für Partner A)
     c.execute("INSERT OR IGNORE INTO locations (partner, latitude, longitude, accuracy, speed, heading, battery_level, is_charging, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-              ("Partner A", 52.5200, 13.4050, 15.0, 0.0, 0.0, 85, 0, now))
+              ("Partner A", 51.0504, 13.7373, 10.0, 0.0, 0.0, 85, 0, now))
     c.execute("INSERT OR IGNORE INTO locations (partner, latitude, longitude, accuracy, speed, heading, battery_level, is_charging, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
               ("Partner B", 48.1351, 11.5820, 20.0, 28.5, 180.0, 72, 1, now))
+
+    # Migration: Altes Berlin-Dummy auf Dresden aktualisieren
+    c.execute("UPDATE locations SET latitude = 51.0504, longitude = 13.7373 WHERE partner = 'Partner A' AND latitude = 52.52 AND longitude = 13.405")
+    c.execute("UPDATE profile SET value = 'Dresden' WHERE key = 'partner_a_city' AND value = 'Berlin'")
 
     conn.commit()
     conn.close()
