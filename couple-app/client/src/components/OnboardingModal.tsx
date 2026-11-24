@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Heart, Cake, MapPin, Sparkles, ArrowRight, UserCheck } from 'lucide-react';
+import { Heart, Cake, Sparkles, ArrowRight, UserCheck } from 'lucide-react';
 import { differenceInDays } from 'date-fns';
 import type { ProfileData, UserRole } from '../types';
 
@@ -8,11 +8,6 @@ interface OnboardingModalProps {
   initialRole: UserRole;
   onComplete: (completedProfile: ProfileData, selectedRole: UserRole) => void;
 }
-
-const COMMON_CITIES = [
-  'Berlin', 'München', 'Hamburg', 'Köln', 'Frankfurt', 'Stuttgart',
-  'Düsseldorf', 'Leipzig', 'Dresden', 'Hannover', 'Nürnberg', 'Wien', 'Zürich'
-];
 
 export default function OnboardingModal({
   initialProfile,
@@ -27,8 +22,6 @@ export default function OnboardingModal({
   const [startDate, setStartDate] = useState(initialProfile.start_date || '2023-05-12');
   const [partnerABirthday, setPartnerABirthday] = useState(initialProfile.partner_a_birthday || '');
   const [partnerBBirthday, setPartnerBBirthday] = useState(initialProfile.partner_b_birthday || '');
-  const [cityA, setCityA] = useState(initialProfile.partner_a_city || 'Berlin');
-  const [cityB, setCityB] = useState(initialProfile.partner_b_city || 'München');
 
   // Days calculation preview
   const daysPreview = startDate
@@ -37,7 +30,7 @@ export default function OnboardingModal({
 
   const handleNext = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (step < 5) {
+    if (step < 4) {
       setStep(step + 1);
     } else {
       // Complete setup
@@ -47,8 +40,6 @@ export default function OnboardingModal({
         start_date: startDate || new Date().toISOString().split('T')[0],
         partner_a_birthday: partnerABirthday,
         partner_b_birthday: partnerBBirthday,
-        partner_a_city: cityA || 'Berlin',
-        partner_b_city: cityB || 'München',
         hugs_count: initialProfile.hugs_count || 0,
         setup_completed: true
       };
@@ -70,7 +61,7 @@ export default function OnboardingModal({
 
         {/* Progress Dots */}
         <div className="flex justify-center items-center gap-1.5 mb-4">
-          {[1, 2, 3, 4, 5].map(s => (
+          {[1, 2, 3, 4].map(s => (
             <div
               key={s}
               className={`h-1.5 rounded-full transition-all duration-300 ${
@@ -231,48 +222,6 @@ export default function OnboardingModal({
                   />
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* STEP 5: Standorte & Abschluss */}
-          {step === 5 && (
-            <div className="space-y-3 animate-in">
-              <div className="text-center">
-                <h3 className="text-base font-extrabold text-gray-800">Wo wohnt ihr? 📍</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Für den Entfernungs- und Reisezeitrechner</p>
-              </div>
-
-              <div className="space-y-3 pt-1">
-                <div>
-                  <label className="text-xs font-bold text-pink-600 flex items-center gap-1 mb-1">
-                    <MapPin size={14} /> Stadt von {partnerAName || 'Partner A'}:
-                  </label>
-                  <select
-                    value={cityA}
-                    onChange={e => setCityA(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:border-pink-500"
-                  >
-                    {COMMON_CITIES.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-purple-600 flex items-center gap-1 mb-1">
-                    <MapPin size={14} /> Stadt von {partnerBName || 'Partner B'}:
-                  </label>
-                  <select
-                    value={cityB}
-                    onChange={e => setCityB(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:border-purple-500"
-                  >
-                    {COMMON_CITIES.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
 
               <div className="bg-gradient-to-r from-pink-50 to-purple-50 p-3 rounded-2xl border border-pink-100 text-center mt-3">
                 <p className="text-xs font-bold text-gray-700">
@@ -300,7 +249,7 @@ export default function OnboardingModal({
             onClick={() => handleNext()}
             className="flex-1 py-2.5 rounded-xl font-black text-white bg-gradient-to-r from-pink-500 via-rose-400 to-purple-500 hover:opacity-95 text-xs shadow-md active:scale-98 transition-all flex items-center justify-center gap-1.5"
           >
-            {step === 5 ? (
+            {step === 4 ? (
               <>
                 <Sparkles size={14} /> Unseren Space betreten! 💕
               </>

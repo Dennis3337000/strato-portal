@@ -11,7 +11,9 @@ import type {
   NoteItem,
   CountdownItem,
   QuestionWithAnswers,
-  LiveLocation
+  CouponItem,
+  DateIdeaItem,
+  LetterItem
 } from './types';
 import { api } from './api';
 
@@ -22,7 +24,6 @@ import CalendarView from './components/CalendarView';
 import MealPlanner from './components/MealPlanner';
 import QuizView from './components/QuizView';
 import ListsView from './components/ListsView';
-import DistanceView from './components/DistanceView';
 import SettingsModal from './components/SettingsModal';
 import OnboardingModal from './components/OnboardingModal';
 
@@ -43,8 +44,6 @@ export default function App() {
     start_date: '',
     partner_a_birthday: '',
     partner_b_birthday: '',
-    partner_a_city: 'Berlin',
-    partner_b_city: 'München',
     hugs_count: 0,
     setup_completed: false
   });
@@ -60,10 +59,12 @@ export default function App() {
     target_date: '2026-05-12'
   });
   const [quizData, setQuizData] = useState<QuestionWithAnswers[]>([]);
-  const [locations, setLocations] = useState<Record<string, LiveLocation>>({});
-  const [isSharingLocation, setIsSharingLocation] = useState<boolean>(() => {
-    return localStorage.getItem('cl_share_location') !== 'false';
-  });
+
+  // New features state
+  const [coupons, setCoupons] = useState<CouponItem[]>([]);
+  const [mostLikelyVotes, setMostLikelyVotes] = useState<Record<string, Record<string, { vote: string; created_at: string }>>>({});
+  const [dateIdeas, setDateIdeas] = useState<DateIdeaItem[]>([]);
+  const [letters, setLetters] = useState<LetterItem[]>([]);
 
   // Load all data from API on start
   useEffect(() => {
@@ -79,7 +80,10 @@ export default function App() {
           noteData,
           cdData,
           qData,
-          locData
+          cData,
+          mlData,
+          diData,
+          letData
         ] = await Promise.all([
           api.getProfile(),
           api.getMoods(),
@@ -90,7 +94,10 @@ export default function App() {
           api.getNotes(),
           api.getCountdown(),
           api.getQuiz(),
-          api.getLiveLocations()
+          api.getCoupons(),
+          api.getMostLikelyVotes(),
+          api.getDateIdeas(),
+          api.getLetters()
         ]);
 
         if (profData) {
@@ -109,7 +116,10 @@ export default function App() {
         if (noteData) setNotes(noteData);
         if (cdData) setCountdown(cdData);
         if (qData) setQuizData(qData);
-        if (locData) setLocations(locData);
+        if (cData) setCoupons(cData);
+        if (mlData) setMostLikelyVotes(mlData);
+        if (diData) setDateIdeas(diData);
+        if (letData) setLetters(letData);
       } catch (e) {
         console.error('Fehler beim Laden der Couple-Daten:', e);
       }
@@ -136,251 +146,6 @@ export default function App() {
     localStorage.setItem('cl_user_role', newRole);
     const name = newRole === 'Partner A' ? (profile.partner_a_name || 'Partner A') : (profile.partner_b_name || 'Partner B');
     showToast(`Eingeloggt als ${name} (${newRole}) 💕`);
-  };
-
-  // Background Geolocation tracking & Partner location polling
-  useEffect(() => {
-    // 1. Periodic background polling for partner location every 8s
-    const pollInterval = setInterval(async () => {
-      try {
-        const fresh = await api.getLiveLocations();
-        if (fresh) setLocations(fresh);
-      } catch {}
-    }, 8000);
-
-    // 2. Background Geolocation tracking for active partner
-    let watchId: number | null = null;
-    let lastSent = 0;
-
-    async function sendCurrentPosition(pos: GeolocationPosition) {
-      const now = Date.now();
-      // Throttle GPS updates to max once every 10 seconds to save battery
-      if (now - lastSent < 10000) return;
-      lastSent = now;
-
-      const currentPartner = role || 'Partner A';
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
-      const accuracy = pos.coords.accuracy || 10;
-      const speedKmH =
-        pos.coords.speed !== null && pos.coords.speed !== undefined && pos.coords.speed >= 0
-          ? Math.round(pos.coords.speed * 3.6)
-          : 0;
-
-      // Check battery
-      let batteryLevel: number | undefined = undefined;
-      let isCharging: boolean | undefined = undefined;
-      try {
-        if ('getBattery' in navigator) {
-          const b: any = await (navigator as any).getBattery();
-          batteryLevel = Math.round(b.level * 100);
-          isCharging = b.charging;
-        }
-      } catch {}
-
-      await api.updateLiveLocation({
-        partner: currentPartner,
-        latitude: lat,
-        longitude: lon,
-        accuracy,
-        speed: speedKmH,
-        heading: pos.coords.heading || 0,
-        battery_level: batteryLevel,
-        is_charging: isCharging
-      });
-
-      setLocations(prev => ({
-        ...prev,
-        [currentPartner]: {
-          partner: currentPartner,
-          latitude: lat,
-          longitude: lon,
-          accuracy,
-          speed: speedKmH,
-          heading: pos.coords.heading || 0,
-          battery_level: batteryLevel,
-          is_charging: isCharging,
-          updated_at: 'Gerade eben'
-        }
-      }));
-    }
-
-    if (isSharingLocation && 'geolocation' in navigator) {
-      watchId = navigator.geolocation.watchPosition(
-        sendCurrentPosition,
-        (err) => console.log('GPS watch warning:', err.message),
-        {
-          enableHighAccuracy: true,
-          maximumAge: 5000,
-          timeout: 15000
-        }
-      );
-    }
-
-    return () => {
-      clearInterval(pollInterval);
-      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-    };
-  }, [role, isSharingLocation]);
-
-  const handleToggleSharing = () => {
-    setIsSharingLocation(prev => {
-      const next = !prev;
-      localStorage.setItem('cl_share_location', String(next));
-      showToast(next ? 'Live-Standort teilen aktiviert 🟢' : 'Standort-Freigabe pausiert ⏸️');
-      if (next) {
-        requestRealGPSLocation();
-      }
-      return next;
-    });
-  };
-
-  const [isAcquiringGPS, setIsAcquiringGPS] = useState(false);
-  const [gpsStatus, setGpsStatus] = useState<string | null>(null);
-
-  const requestRealGPSLocation = async () => {
-    setIsAcquiringGPS(true);
-    setGpsStatus('Ermittle Telefon-Standort...');
-    showToast('📡 Ermittle echten Handy-Standort...');
-
-    const currentPartner = role || 'Partner A';
-
-    let batteryLevel: number | undefined = undefined;
-    let isCharging: boolean | undefined = undefined;
-    try {
-      if ('getBattery' in navigator) {
-        const b: any = await (navigator as any).getBattery();
-        batteryLevel = Math.round(b.level * 100);
-        isCharging = b.charging;
-      }
-    } catch {}
-
-    const saveAndApply = async (lat: number, lon: number, accuracy: number, speed: number = 0, source: string) => {
-      await api.updateLiveLocation({
-        partner: currentPartner,
-        latitude: lat,
-        longitude: lon,
-        accuracy,
-        speed,
-        heading: 0,
-        battery_level: batteryLevel,
-        is_charging: isCharging
-      });
-
-      setLocations(prev => ({
-        ...prev,
-        [currentPartner]: {
-          partner: currentPartner,
-          latitude: lat,
-          longitude: lon,
-          accuracy,
-          speed,
-          heading: 0,
-          battery_level: batteryLevel,
-          is_charging: isCharging,
-          updated_at: 'Gerade eben'
-        }
-      }));
-
-      setIsAcquiringGPS(false);
-      setGpsStatus(`Standort erfasst (${source})`);
-      showToast(`📍 Standort erfolgreich erfasst (${source})!`);
-    };
-
-    // 1. Try Hardware GPS (High Accuracy)
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          const accuracy = Math.round(pos.coords.accuracy || 10);
-          const speed =
-            pos.coords.speed !== null && pos.coords.speed !== undefined && pos.coords.speed >= 0
-              ? Math.round(pos.coords.speed * 3.6)
-              : 0;
-          saveAndApply(lat, lon, accuracy, speed, 'Handy-GPS');
-        },
-        async (err) => {
-          console.warn('High-accuracy GPS failed, trying cellular/wifi:', err.message);
-          // 2. Try Low Accuracy (Cellular/Wifi)
-          navigator.geolocation.getCurrentPosition(
-            (pos) => {
-              const lat = pos.coords.latitude;
-              const lon = pos.coords.longitude;
-              const accuracy = Math.round(pos.coords.accuracy || 50);
-              saveAndApply(lat, lon, accuracy, 0, 'Mobilfunk/WLAN');
-            },
-            async (err2) => {
-              console.warn('Browser GPS denied or blocked (e.g. HTTP):', err2.message);
-              // 3. Fallback: IP-based real coordinates
-              try {
-                const res = await fetch('https://ipwho.is/');
-                if (res.ok) {
-                  const data = await res.json();
-                  if (data && data.latitude && data.longitude) {
-                    saveAndApply(data.latitude, data.longitude, 1000, 0, data.city || 'Netzwerk-Ortung');
-                    return;
-                  }
-                }
-              } catch {}
-
-              setIsAcquiringGPS(false);
-              setGpsStatus('GPS blockiert. Bitte Standortzugriff im Browser erlauben!');
-              showToast('⚠️ Bitte im Browser den Standortzugriff erlauben!');
-            },
-            { enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 }
-          );
-        },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-      );
-    } else {
-      try {
-        const res = await fetch('https://ipwho.is/');
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.latitude && data.longitude) {
-            saveAndApply(data.latitude, data.longitude, 1000, 0, data.city || 'Netzwerk-Ortung');
-            return;
-          }
-        }
-      } catch {}
-      setIsAcquiringGPS(false);
-      showToast('⚠️ Geolocation wird von diesem Browser nicht unterstützt');
-    }
-  };
-
-  // Run initial real GPS acquisition once on startup
-  useEffect(() => {
-    if (isSharingLocation) {
-      requestRealGPSLocation();
-    }
-  }, []);
-
-  const handleSendManualLocation = async (lat: number, lon: number, speed: number = 0, targetPartner?: string) => {
-    const partnerToUpdate = targetPartner || (role === 'Partner A' ? 'Partner B' : 'Partner A');
-    await api.updateLiveLocation({
-      partner: partnerToUpdate,
-      latitude: lat,
-      longitude: lon,
-      accuracy: 8,
-      speed,
-      battery_level: 78,
-      is_charging: false
-    });
-    setLocations(prev => ({
-      ...prev,
-      [partnerToUpdate]: {
-        partner: partnerToUpdate,
-        latitude: lat,
-        longitude: lon,
-        accuracy: 8,
-        speed,
-        battery_level: 78,
-        is_charging: false,
-        updated_at: 'Gerade eben'
-      }
-    }));
-    showToast(`Standort von ${partnerToUpdate} gesetzt!`);
   };
 
   const handleCompleteOnboarding = async (completedProfile: ProfileData, selectedRole: UserRole) => {
@@ -433,7 +198,7 @@ export default function App() {
   const handleAddEvent = async (event: Omit<EventItem, 'id'>) => {
     const created = await api.addEvent(event);
     setEvents(prev => [created, ...prev]);
-    showToast('Neues Date eingetragen 📅');
+    showToast('Date im Kalender eingetragen 📅');
   };
 
   const handleDeleteEvent = async (id: number) => {
@@ -529,6 +294,57 @@ export default function App() {
     showToast('Antwort enthüllt! 🎉');
   };
 
+  // Coupon actions
+  const handleRedeemCoupon = async (id: number) => {
+    await api.redeemCoupon(id);
+    setCoupons(prev => prev.map(c => c.id === id ? { ...c, is_redeemed: true, redeemed_at: 'Heute' } : c));
+    showToast('Gutschein eingelöst! 🎉💕');
+  };
+
+  const handleAddCoupon = async (title: string, icon: string, toPartner: string) => {
+    const currentName = role === 'Partner A' ? (profile.partner_a_name || 'Partner A') : (profile.partner_b_name || 'Partner B');
+    const created = await api.addCoupon({ title, icon, from_partner: currentName, to_partner: toPartner });
+    setCoupons(prev => [created, ...prev]);
+    showToast('Gutschein verschenkt! 🎁');
+  };
+
+  const handleDeleteCoupon = async (id: number) => {
+    await api.deleteCoupon(id);
+    setCoupons(prev => prev.filter(c => c.id !== id));
+  };
+
+  // Most likely to actions
+  const handleVoteMostLikely = async (questionId: string, partner: string, vote: string) => {
+    await api.voteMostLikely(questionId, partner, vote);
+    setMostLikelyVotes(prev => {
+      const copy = { ...prev };
+      if (!copy[questionId]) copy[questionId] = {};
+      copy[questionId][partner] = { vote, created_at: 'Gerade eben' };
+      return copy;
+    });
+    showToast(`Tipp für ${vote} abgegeben! 🗳️`);
+  };
+
+  // Date ideas actions
+  const handleAddDateIdea = async (title: string, category: string) => {
+    const created = await api.addDateIdea(title, category);
+    setDateIdeas(prev => [created, ...prev]);
+    showToast('Neue Idee zum Roulette hinzugefügt 🎡');
+  };
+
+  // Letters actions
+  const handleOpenLetter = async (id: number) => {
+    await api.openLetter(id);
+    setLetters(prev => prev.map(l => l.id === id ? { ...l, is_opened: true } : l));
+    showToast('Brief entsiegelt! 💌');
+  };
+
+  const handleAddLetter = async (title: string, content: string, author: string, unlockType: string, unlockCondition: string) => {
+    const created = await api.addLetter({ title, content, author, unlock_type: unlockType, unlock_condition: unlockCondition });
+    setLetters(prev => [created, ...prev]);
+    showToast('Geheimer Liebesbrief versiegelt 🔒');
+  };
+
   const handleResetData = () => {
     localStorage.clear();
     window.location.reload();
@@ -569,8 +385,6 @@ export default function App() {
             countdown={countdown}
             events={events}
             meals={meals}
-            notes={notes}
-            locations={locations}
             onUpdateMood={handleUpdateMood}
             onSendHug={handleSendHug}
             onNavigateTab={setActiveTab}
@@ -581,9 +395,11 @@ export default function App() {
           <CalendarView
             events={events}
             countdown={countdown}
+            dateIdeas={dateIdeas}
             onAddEvent={handleAddEvent}
             onDeleteEvent={handleDeleteEvent}
             onUpdateCountdown={handleUpdateCountdown}
+            onAddDateIdea={handleAddDateIdea}
           />
         )}
 
@@ -602,7 +418,9 @@ export default function App() {
             quizData={quizData}
             role={role}
             profile={profile}
+            mostLikelyVotes={mostLikelyVotes}
             onSubmitAnswer={handleSubmitQuizAnswer}
+            onVoteMostLikely={handleVoteMostLikely}
           />
         )}
 
@@ -611,6 +429,8 @@ export default function App() {
             shopping={shopping}
             bucket={bucket}
             notes={notes}
+            coupons={coupons}
+            letters={letters}
             profile={profile}
             role={role}
             onAddShopping={handleAddShopping}
@@ -621,22 +441,11 @@ export default function App() {
             onDeleteBucket={handleDeleteBucket}
             onAddNote={handleAddNote}
             onDeleteNote={handleDeleteNote}
-          />
-        )}
-
-        {(activeTab === 'map' || activeTab === 'distance') && (
-          <DistanceView
-            locations={locations}
-            profile={profile}
-            role={role}
-            isSharingLocation={isSharingLocation}
-            isAcquiringGPS={isAcquiringGPS}
-            gpsStatusMessage={gpsStatus}
-            onToggleSharing={handleToggleSharing}
-            onRequestGPS={requestRealGPSLocation}
-            onSendManualLocation={handleSendManualLocation}
-            onUpdateCity={handleUpdateProfileKey}
-            onSendHug={handleSendHug}
+            onRedeemCoupon={handleRedeemCoupon}
+            onAddCoupon={handleAddCoupon}
+            onDeleteCoupon={handleDeleteCoupon}
+            onOpenLetter={handleOpenLetter}
+            onAddLetter={handleAddLetter}
           />
         )}
       </main>

@@ -8,7 +8,9 @@ import type {
   NoteItem,
   CountdownItem,
   QuestionWithAnswers,
-  LiveLocation
+  CouponItem,
+  DateIdeaItem,
+  LetterItem
 } from './types';
 
 // Relative path so it works seamlessly under /couple/ or /
@@ -71,31 +73,6 @@ const DEFAULT_COUNTDOWN: CountdownItem = {
   id: 1,
   title: 'Unser nächstes Wiedersehen 💕',
   target_date: '2026-05-12'
-};
-
-const DEFAULT_LOCATIONS: Record<string, LiveLocation> = {
-  'Partner A': {
-    partner: 'Partner A',
-    latitude: 51.0504,
-    longitude: 13.7373,
-    accuracy: 8,
-    speed: 0,
-    heading: 0,
-    battery_level: 84,
-    is_charging: false,
-    updated_at: 'Gerade eben'
-  },
-  'Partner B': {
-    partner: 'Partner B',
-    latitude: 48.1351,
-    longitude: 11.5820,
-    accuracy: 12,
-    speed: 28,
-    heading: 180,
-    battery_level: 76,
-    is_charging: true,
-    updated_at: 'Vor 1 Min'
-  }
 };
 
 const DEFAULT_QUIZ: QuestionWithAnswers[] = [
@@ -442,22 +419,144 @@ export const api = {
     });
   },
 
-  // Live Locations & GPS Tracking
-  async getLiveLocations(): Promise<Record<string, LiveLocation>> {
-    return await fetchWithFallback<Record<string, LiveLocation>>('location', undefined, 'locations', DEFAULT_LOCATIONS);
+  // Coupons (Gutscheinheft)
+  async getCoupons(): Promise<CouponItem[]> {
+    return await fetchWithFallback<CouponItem[]>('coupons', undefined, 'coupons', [
+      { id: 1, title: '1x Frühstück ans Bett ☕🥐', icon: '🥐', from_partner: 'Partner A', to_partner: 'Partner B', is_redeemed: false },
+      { id: 2, title: '1x 20-Minuten-Rückenmassage 💆', icon: '💆', from_partner: 'Partner A', to_partner: 'Partner B', is_redeemed: false },
+      { id: 3, title: '1x Ich koche heute dein Lieblingsessen 🍝', icon: '🍝', from_partner: 'Partner A', to_partner: 'Partner B', is_redeemed: false },
+      { id: 4, title: '1x Du bestimmst den Film heute Abend 🎬', icon: '🎬', from_partner: 'Partner A', to_partner: 'Partner B', is_redeemed: false },
+      { id: 5, title: '1x Streit-Joker & Sofort-Versöhnung 😇', icon: '😇', from_partner: 'Partner A', to_partner: 'Partner B', is_redeemed: false }
+    ]);
   },
 
-  async updateLiveLocation(location: Omit<LiveLocation, 'updated_at'>): Promise<void> {
-    const locs = getLocal<Record<string, LiveLocation>>('locations', DEFAULT_LOCATIONS);
-    locs[location.partner] = {
-      ...location,
-      updated_at: 'Gerade eben'
-    };
-    setLocal('locations', locs);
+  async addCoupon(coupon: Omit<CouponItem, 'id' | 'is_redeemed'>): Promise<CouponItem> {
+    const list = getLocal<CouponItem[]>('coupons', []);
+    const newItem: CouponItem = { id: Date.now(), ...coupon, is_redeemed: false };
+    setLocal('coupons', [newItem, ...list]);
 
-    await fetchWithFallback('location', {
+    try {
+      const res = await fetch(`${BASE_URL}/coupons`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(coupon)
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setLocal('coupons', [created, ...list]);
+        return created;
+      }
+    } catch {}
+    return newItem;
+  },
+
+  async redeemCoupon(id: number): Promise<void> {
+    const list = getLocal<CouponItem[]>('coupons', []);
+    const now = 'Gerade eben';
+    const updated = list.map(c => c.id === id ? { ...c, is_redeemed: true, redeemed_at: now } : c);
+    setLocal('coupons', updated);
+    await fetchWithFallback(`coupons/${id}/redeem`, { method: 'PUT' });
+  },
+
+  async deleteCoupon(id: number): Promise<void> {
+    const list = getLocal<CouponItem[]>('coupons', []);
+    setLocal('coupons', list.filter(c => c.id !== id));
+    await fetchWithFallback(`coupons/${id}`, { method: 'DELETE' });
+  },
+
+  // Most Likely To Game (Wer eher...?)
+  async getMostLikelyVotes(): Promise<Record<string, Record<string, { vote: string; created_at: string }>>> {
+    return await fetchWithFallback('most-likely', undefined, 'most_likely', {});
+  },
+
+  async voteMostLikely(question_id: string, partner: string, vote: string): Promise<void> {
+    const votes = getLocal<Record<string, Record<string, { vote: string; created_at: string }>>>('most_likely', {});
+    if (!votes[question_id]) votes[question_id] = {};
+    votes[question_id][partner] = { vote, created_at: 'Gerade eben' };
+    setLocal('most_likely', votes);
+
+    await fetchWithFallback('most-likely/vote', {
       method: 'POST',
-      body: JSON.stringify(location)
+      body: JSON.stringify({ question_id, partner, vote })
     });
+  },
+
+  // Date Ideas (Roulette)
+  async getDateIdeas(): Promise<DateIdeaItem[]> {
+    return await fetchWithFallback<DateIdeaItem[]>('date-ideas', undefined, 'date_ideas', [
+      { id: 1, title: 'Deckenburg im Wohnzimmer bauen & Film schauen 🏰', category: 'Zuhause', is_custom: false },
+      { id: 2, title: 'Selbstgemachte Steinofen-Pizza belegen 🍕', category: 'Zuhause', is_custom: false },
+      { id: 3, title: 'Romantischer Candlelight-Wellnessabend mit Masken 🧖', category: 'Zuhause', is_custom: false },
+      { id: 4, title: 'Cocktails oder Wein auf dem Balkon mixen 🍷', category: 'Zuhause', is_custom: false },
+      { id: 5, title: 'Gegenseitig ein 3-Gänge-Menü kochen 🍳', category: 'Zuhause', is_custom: false },
+      { id: 6, title: 'Nachtspaziergang mit Eis in der Hand 🍦', category: 'Draußen', is_custom: false },
+      { id: 7, title: 'Kinoabend mit Riesen-Popcorn 🍿', category: 'Draußen', is_custom: false },
+      { id: 8, title: 'Gemeinsames Bowling- oder Minigolf-Duell 🎳', category: 'Draußen', is_custom: false },
+      { id: 9, title: 'Spontanes Sonnenuntergangs-Picknick 🧺', category: 'Draußen', is_custom: false },
+      { id: 10, title: 'Spontaner Ausflug zum nächsten See / Aussichtspunkt 🚗', category: 'Abenteuer', is_custom: false }
+    ]);
+  },
+
+  async addDateIdea(title: string, category: string): Promise<DateIdeaItem> {
+    const list = getLocal<DateIdeaItem[]>('date_ideas', []);
+    const newItem: DateIdeaItem = { id: Date.now(), title, category, is_custom: true };
+    setLocal('date_ideas', [newItem, ...list]);
+
+    try {
+      const res = await fetch(`${BASE_URL}/date-ideas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, category })
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setLocal('date_ideas', [created, ...list]);
+        return created;
+      }
+    } catch {}
+    return newItem;
+  },
+
+  // Letters (Zeitschloss-Liebesbriefe)
+  async getLetters(): Promise<LetterItem[]> {
+    return await fetchWithFallback<LetterItem[]>('letters', undefined, 'letters', [
+      {
+        id: 1,
+        title: 'Für einen stressigen Tag ❤️',
+        content: 'Atme kurz tief durch, mein Schatz. Du machst das großartig und ich bin immer stolz auf dich. Heute Abend koche ich für dich!',
+        author: 'Partner A',
+        unlock_type: 'mood',
+        unlock_condition: 'stress',
+        is_opened: false,
+        created_at: 'Gestern'
+      }
+    ]);
+  },
+
+  async addLetter(letter: Omit<LetterItem, 'id' | 'is_opened' | 'created_at'>): Promise<LetterItem> {
+    const list = getLocal<LetterItem[]>('letters', []);
+    const newItem: LetterItem = { id: Date.now(), ...letter, is_opened: false, created_at: 'Heute' };
+    setLocal('letters', [newItem, ...list]);
+
+    try {
+      const res = await fetch(`${BASE_URL}/letters`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(letter)
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setLocal('letters', [created, ...list]);
+        return created;
+      }
+    } catch {}
+    return newItem;
+  },
+
+  async openLetter(id: number): Promise<void> {
+    const list = getLocal<LetterItem[]>('letters', []);
+    const updated = list.map(l => l.id === id ? { ...l, is_opened: true } : l);
+    setLocal('letters', updated);
+    await fetchWithFallback(`letters/${id}/open`, { method: 'PUT' });
   }
 };

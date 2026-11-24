@@ -1,13 +1,16 @@
 import { useState } from 'react';
-import { Plus, Trash2, Calendar, Tag } from 'lucide-react';
-import type { EventItem, CountdownItem } from '../types';
+import { Plus, Trash2, Calendar, Tag, Dices } from 'lucide-react';
+import type { EventItem, CountdownItem, DateIdeaItem } from '../types';
+import DateRoulette from './DateRoulette';
 
 interface CalendarViewProps {
   events: EventItem[];
   countdown: CountdownItem;
+  dateIdeas?: DateIdeaItem[];
   onAddEvent: (event: Omit<EventItem, 'id'>) => void;
   onDeleteEvent: (id: number) => void;
   onUpdateCountdown: (title: string, target_date: string) => void;
+  onAddDateIdea?: (title: string, category: string) => void;
 }
 
 const CATEGORIES: ('Date' | 'Reise' | 'Jahrestag' | 'Feier' | 'Gemütlich')[] = [
@@ -21,10 +24,13 @@ const CATEGORIES: ('Date' | 'Reise' | 'Jahrestag' | 'Feier' | 'Gemütlich')[] = 
 export default function CalendarView({
   events,
   countdown,
+  dateIdeas = [],
   onAddEvent,
   onDeleteEvent,
-  onUpdateCountdown
+  onUpdateCountdown,
+  onAddDateIdea = () => {}
 }: CalendarViewProps) {
+  const [subTab, setSubTab] = useState<'calendar' | 'roulette'>('calendar');
   const [selectedFilter, setSelectedFilter] = useState<string>('Alle');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCountdownModal, setShowCountdownModal] = useState(false);
@@ -81,120 +87,166 @@ export default function CalendarView({
   };
 
   return (
-    <div className="space-y-4 animate-in">
-      {/* Top Action Bar */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-extrabold text-gray-800">Unser Kalender</h2>
-          <p className="text-xs text-gray-400 font-medium">Gemeinsame Pläne & Vorfreude</p>
-        </div>
+    <div className="space-y-3 pb-3 animate-in w-full max-w-full overflow-hidden">
+      {/* Sub-Tab Switcher */}
+      <div className="flex bg-white/90 p-1 rounded-2xl shadow-xs border border-gray-100 gap-1 w-full">
         <button
-          onClick={() => setShowAddModal(true)}
-          className="bg-gradient-to-r from-pink-500 to-rose-400 text-white px-3.5 py-2 rounded-2xl text-xs font-bold shadow-md hover:shadow-lg active:scale-95 flex items-center gap-1.5 transition-all"
+          type="button"
+          onClick={() => setSubTab('calendar')}
+          className={`flex-1 py-1.5 text-[11px] font-black rounded-xl transition-all flex items-center justify-center gap-1 min-w-0 ${
+            subTab === 'calendar'
+              ? 'bg-[var(--color-primary)] text-white shadow-xs'
+              : 'text-gray-500 hover:text-gray-800'
+          }`}
         >
-          <Plus size={16} /> Date planen
+          <Calendar size={13} className="shrink-0" />
+          <span className="truncate">Termine & Dates</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubTab('roulette')}
+          className={`flex-1 py-1.5 text-[11px] font-black rounded-xl transition-all flex items-center justify-center gap-1 min-w-0 ${
+            subTab === 'roulette'
+              ? 'bg-[var(--color-primary)] text-white shadow-xs'
+              : 'text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          <Dices size={13} className="shrink-0" />
+          <span className="truncate">Date-Roulette 🎡</span>
         </button>
       </div>
 
-      {/* Countdown Card with Edit Option */}
-      <div className="glass-panel p-4 rounded-3xl border border-pink-100 shadow-sm flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-pink-100 text-pink-600 flex items-center justify-center">
-            <Calendar size={20} />
-          </div>
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-pink-500">Großer Countdown</span>
-            <h4 className="font-bold text-xs text-gray-800">{countdown.title}</h4>
-            <span className="text-[10px] text-gray-400">{countdown.target_date}</span>
-          </div>
-        </div>
-        <button
-          onClick={() => setShowCountdownModal(true)}
-          className="text-xs font-bold text-pink-600 hover:text-pink-700 bg-pink-50 px-3 py-1.5 rounded-xl"
-        >
-          Ändern
-        </button>
-      </div>
-
-      {/* Category Filter Pills */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1 text-xs">
-        {['Alle', ...CATEGORIES].map(cat => (
-          <button
-            key={cat}
-            onClick={() => setSelectedFilter(cat)}
-            className={`px-3 py-1.5 rounded-full font-bold whitespace-nowrap transition-all ${
-              selectedFilter === cat
-                ? 'bg-[var(--color-primary)] text-white shadow-sm'
-                : 'bg-white/80 text-gray-500 hover:bg-white'
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      {/* Events List */}
-      <div className="space-y-3">
-        {filteredEvents.length === 0 ? (
-          <div className="glass-panel p-8 rounded-3xl text-center text-gray-400">
-            <Calendar size={36} className="mx-auto mb-2 opacity-30" />
-            <p className="text-sm font-semibold">Keine Termine in dieser Kategorie</p>
-            <p className="text-xs text-gray-400 mt-1">Tragt euer nächstes gemeinsames Date ein!</p>
-          </div>
-        ) : (
-          filteredEvents.map(event => (
-            <div
-              key={event.id}
-              className="glass-panel p-4 rounded-2xl shadow-sm border border-white/70 hover:shadow-md transition-shadow relative group"
+      {subTab === 'roulette' ? (
+        <DateRoulette
+          ideas={dateIdeas}
+          onAddIdea={onAddDateIdea}
+          onScheduleDate={(title, cat) => {
+            const todayStr = new Date().toISOString().split('T')[0];
+            onAddEvent({ title, date: todayStr, category: cat });
+          }}
+        />
+      ) : (
+        <div className="space-y-3 animate-in">
+          {/* Top Action Bar */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-black text-gray-800">Unser Kalender</h2>
+              <p className="text-xs text-gray-400 font-medium">Gemeinsame Pläne & Vorfreude</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="bg-gradient-to-r from-pink-500 to-rose-400 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-xs hover:shadow-md active:scale-95 flex items-center gap-1 transition-all"
             >
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wide bg-pink-50 text-pink-500 px-2 py-0.5 rounded-lg flex items-center gap-1">
-                      <Tag size={10} /> {event.category}
-                    </span>
-                    {getDaysBadge(event.date)}
-                  </div>
-                  <h3 className="font-extrabold text-sm text-gray-800">{event.title}</h3>
-                  <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
-                    <Calendar size={12} />
-                    <span>{event.date}</span>
-                  </div>
-                  {event.description && (
-                    <p className="text-xs text-gray-600 mt-2 bg-white/60 p-2 rounded-xl">
-                      {event.description}
-                    </p>
-                  )}
-                </div>
+              <Plus size={15} /> Date planen
+            </button>
+          </div>
 
-                <button
-                  onClick={() => onDeleteEvent(event.id)}
-                  title="Date löschen"
-                  className="text-gray-300 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50 transition-colors"
-                >
-                  <Trash2 size={16} />
-                </button>
+          {/* Countdown Card with Edit Option */}
+          <div className="glass-panel p-3.5 rounded-2xl border border-pink-100 shadow-xs flex items-center justify-between">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-pink-100 text-pink-600 flex items-center justify-center shrink-0">
+                <Calendar size={18} />
+              </div>
+              <div className="min-w-0">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-pink-500 block">Großer Countdown</span>
+                <h4 className="font-black text-xs text-gray-800 truncate">{countdown.title}</h4>
+                <span className="text-[10px] text-gray-400 block">{countdown.target_date}</span>
               </div>
             </div>
-          ))
-        )}
-      </div>
+            <button
+              type="button"
+              onClick={() => setShowCountdownModal(true)}
+              className="text-xs font-bold text-pink-600 hover:text-pink-700 bg-pink-50 px-2.5 py-1 rounded-xl shrink-0"
+            >
+              Ändern
+            </button>
+          </div>
+
+          {/* Category Filter Pills */}
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-xs">
+            {['Alle', ...CATEGORIES].map(cat => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setSelectedFilter(cat)}
+                className={`px-3 py-1 rounded-full font-bold whitespace-nowrap text-[11px] transition-all ${
+                  selectedFilter === cat
+                    ? 'bg-[var(--color-primary)] text-white shadow-xs'
+                    : 'bg-white/80 text-gray-500 hover:bg-white'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          {/* Events List */}
+          <div className="space-y-2">
+            {filteredEvents.length === 0 ? (
+              <div className="glass-panel p-6 rounded-3xl text-center text-gray-400">
+                <Calendar size={32} className="mx-auto mb-1 opacity-30" />
+                <p className="text-xs font-semibold">Keine Termine in dieser Kategorie</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">Tragt euer nächstes gemeinsames Date ein!</p>
+              </div>
+            ) : (
+              filteredEvents.map(event => (
+                <div
+                  key={event.id}
+                  className="glass-panel p-3.5 rounded-2xl shadow-xs border border-white/80 hover:shadow-sm transition-shadow relative"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-[9px] font-bold uppercase tracking-wide bg-pink-50 text-pink-500 px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0">
+                          <Tag size={9} /> {event.category}
+                        </span>
+                        {getDaysBadge(event.date)}
+                      </div>
+                      <h3 className="font-extrabold text-xs text-gray-800 truncate">{event.title}</h3>
+                      <div className="flex items-center gap-1 text-[11px] text-gray-400 mt-0.5">
+                        <Calendar size={11} />
+                        <span>{event.date}</span>
+                      </div>
+                      {event.description && (
+                        <p className="text-[11px] text-gray-600 mt-1.5 bg-white/70 p-2 rounded-xl">
+                          {event.description}
+                        </p>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => onDeleteEvent(event.id)}
+                      title="Date löschen"
+                      className="text-gray-300 hover:text-rose-500 p-1 rounded-lg shrink-0"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modal: Neues Date anlegen */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-gray-800">Neues Date eintragen 💕</h3>
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-3">
+            <h3 className="text-base font-bold text-gray-800">Neues Date eintragen 💕</h3>
             <form onSubmit={handleCreateEvent} className="space-y-3">
               <div>
                 <label className="text-xs font-bold text-gray-500">Titel</label>
                 <input
                   type="text"
                   required
-                  placeholder="z.B. Romantisches Picknick"
+                  placeholder="z.B. Romantisches Essen"
                   value={newTitle}
                   onChange={e => setNewTitle(e.target.value)}
-                  className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-400"
+                  className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-400"
                 />
               </div>
 
@@ -205,7 +257,7 @@ export default function CalendarView({
                   required
                   value={newDate}
                   onChange={e => setNewDate(e.target.value)}
-                  className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-400"
+                  className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-400"
                 />
               </div>
 
@@ -214,7 +266,7 @@ export default function CalendarView({
                 <select
                   value={newCategory}
                   onChange={e => setNewCategory(e.target.value as any)}
-                  className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-400"
+                  className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-400"
                 >
                   {CATEGORIES.map(c => (
                     <option key={c} value={c}>{c}</option>
@@ -226,10 +278,10 @@ export default function CalendarView({
                 <label className="text-xs font-bold text-gray-500">Details / Notizen (optional)</label>
                 <textarea
                   rows={2}
-                  placeholder="Adresse, Treffpunkt, was man mitbringt..."
+                  placeholder="Treffpunkt, Restaurant..."
                   value={newDesc}
                   onChange={e => setNewDesc(e.target.value)}
-                  className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-400"
+                  className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-400"
                 />
               </div>
 
@@ -237,13 +289,13 @@ export default function CalendarView({
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="flex-1 py-2.5 rounded-xl font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 text-xs"
+                  className="flex-1 py-2 rounded-xl font-bold text-gray-500 bg-gray-100 text-xs"
                 >
                   Abbrechen
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-xl font-bold text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-xs shadow-md"
+                  className="flex-1 py-2 rounded-xl font-bold text-white bg-[var(--color-primary)] text-xs shadow-md"
                 >
                   Speichern
                 </button>
@@ -255,19 +307,19 @@ export default function CalendarView({
 
       {/* Modal: Countdown ändern */}
       {showCountdownModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-gray-800">Countdown bearbeiten ⏳</h3>
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-3">
+            <h3 className="text-base font-bold text-gray-800">Countdown bearbeiten ⏳</h3>
             <form onSubmit={handleSaveCountdown} className="space-y-3">
               <div>
                 <label className="text-xs font-bold text-gray-500">Ereignis-Name</label>
                 <input
                   type="text"
                   required
-                  placeholder="z.B. Unser nächstes Treffen"
+                  placeholder="z.B. Unser nächster Urlaub"
                   value={cdTitle}
                   onChange={e => setCdTitle(e.target.value)}
-                  className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-400"
+                  className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-400"
                 />
               </div>
 
@@ -278,7 +330,7 @@ export default function CalendarView({
                   required
                   value={cdDate}
                   onChange={e => setCdDate(e.target.value)}
-                  className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-400"
+                  className="w-full mt-1 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-400"
                 />
               </div>
 
@@ -286,13 +338,13 @@ export default function CalendarView({
                 <button
                   type="button"
                   onClick={() => setShowCountdownModal(false)}
-                  className="flex-1 py-2.5 rounded-xl font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 text-xs"
+                  className="flex-1 py-2 rounded-xl font-bold text-gray-500 bg-gray-100 text-xs"
                 >
                   Abbrechen
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-xl font-bold text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-xs shadow-md"
+                  className="flex-1 py-2 rounded-xl font-bold text-white bg-[var(--color-primary)] text-xs shadow-md"
                 >
                   Übernehmen
                 </button>

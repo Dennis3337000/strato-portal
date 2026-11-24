@@ -127,6 +127,85 @@ def init_db():
         )
     ''')
 
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS coupons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            icon TEXT DEFAULT '🎁',
+            from_partner TEXT NOT NULL,
+            to_partner TEXT NOT NULL,
+            is_redeemed BOOLEAN DEFAULT 0,
+            redeemed_at TEXT
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS most_likely (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            question_id TEXT NOT NULL,
+            partner TEXT NOT NULL,
+            vote TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(question_id, partner)
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS date_ideas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            category TEXT NOT NULL,
+            is_custom BOOLEAN DEFAULT 0
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS letters (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            author TEXT NOT NULL,
+            unlock_type TEXT NOT NULL,
+            unlock_condition TEXT NOT NULL,
+            is_opened BOOLEAN DEFAULT 0,
+            created_at TEXT NOT NULL
+        )
+    ''')
+
+    # Seed Default Coupons falls leer
+    c.execute("SELECT COUNT(*) FROM coupons")
+    if c.fetchone()[0] == 0:
+        default_coupons = [
+            ("1x Frühstück ans Bett ☕🥐", "🥐", "Partner A", "Partner B"),
+            ("1x 20-Minuten-Rückenmassage 💆", "💆", "Partner A", "Partner B"),
+            ("1x Ich koche heute dein Lieblingsessen 🍝", "🍝", "Partner A", "Partner B"),
+            ("1x Du bestimmst den Film heute Abend 🎬", "🎬", "Partner A", "Partner B"),
+            ("1x Streit-Joker & Sofort-Versöhnung 😇", "😇", "Partner A", "Partner B"),
+            ("1x Gemütlicher Fußmassage-Abend 🦶", "🦶", "Partner A", "Partner B"),
+            ("1x Spontaner Eisbecher geht auf mich 🍦", "🍦", "Partner A", "Partner B"),
+            ("1x Ein ganzer Tag ohne Widerworte 👑", "👑", "Partner A", "Partner B")
+        ]
+        for title, icon, fp, tp in default_coupons:
+            c.execute("INSERT INTO coupons (title, icon, from_partner, to_partner, is_redeemed) VALUES (?, ?, ?, ?, 0)",
+                      (title, icon, fp, tp))
+
+    # Seed Default Date Ideas fürs Roulette falls leer
+    c.execute("SELECT COUNT(*) FROM date_ideas")
+    if c.fetchone()[0] == 0:
+        default_ideas = [
+            ("Deckenburg im Wohnzimmer bauen & Film schauen 🏰", "Zuhause"),
+            ("Selbstgemachte Steinofen-Pizza belegen 🍕", "Zuhause"),
+            ("Romantischer Candlelight-Wellnessabend mit Masken 🧖", "Zuhause"),
+            ("Cocktails oder Wein auf dem Balkon mixen 🍷", "Zuhause"),
+            ("Gegenseitig ein 3-Gänge-Menü kochen 🍳", "Zuhause"),
+            ("Nachtspaziergang mit Eis in der Hand 🍦", "Draußen"),
+            ("Kinoabend mit Riesen-Popcorn 🍿", "Draußen"),
+            ("Gemeinsames Bowling- oder Minigolf-Duell 🎳", "Draußen"),
+            ("Spontanes Sonnenuntergangs-Picknick 🧺", "Draußen"),
+            ("Besuch in einem neuen Restaurant / Street Food 🍜", "Draußen"),
+            ("Spontaner Ausflug zum nächsten See / Aussichtspunkt 🚗", "Abenteuer"),
+            ("Sonntags-Schlemmerbrunch in einem gemütlichen Café 🥐", "Draußen")
+        ]
+        for title, cat in default_ideas:
+            c.execute("INSERT INTO date_ideas (title, category, is_custom) VALUES (?, ?, 0)", (title, cat))
+
     # Spalten-Migrationen falls Tabellen bereits ohne neue Spalten existierten
     for table, col, col_type in [
         ('events', 'category', "TEXT DEFAULT 'Date'"),
@@ -232,6 +311,30 @@ class LocationUpdate(BaseModel):
     heading: Optional[float] = None
     battery_level: Optional[int] = None
     is_charging: Optional[bool] = None
+
+class CouponItem(BaseModel):
+    title: str
+    icon: Optional[str] = "🎁"
+    from_partner: Optional[str] = "Partner A"
+    to_partner: Optional[str] = "Partner B"
+    is_redeemed: bool = False
+    redeemed_at: Optional[str] = None
+
+class MostLikelyVote(BaseModel):
+    question_id: str
+    partner: str
+    vote: str
+
+class DateIdeaItem(BaseModel):
+    title: str
+    category: str
+
+class LetterItem(BaseModel):
+    title: str
+    content: str
+    author: str
+    unlock_type: str
+    unlock_condition: str
 
 # --- API Routen: Shopping List ---
 @app.get("/api/shopping")
@@ -544,6 +647,152 @@ def send_hug():
     conn.commit()
     conn.close()
     return {"hugs_count": count}
+
+# --- API Routen: Love Coupons (Gutscheinheft) ---
+@app.get("/api/coupons")
+def get_coupons():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT id, title, icon, from_partner, to_partner, is_redeemed, redeemed_at FROM coupons ORDER BY is_redeemed ASC, id DESC")
+    coupons = [{
+        "id": row[0],
+        "title": row[1],
+        "icon": row[2] or "🎁",
+        "from_partner": row[3],
+        "to_partner": row[4],
+        "is_redeemed": bool(row[5]),
+        "redeemed_at": row[6]
+    } for row in c.fetchall()]
+    conn.close()
+    return coupons
+
+@app.post("/api/coupons")
+def add_coupon(c_item: CouponItem):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT INTO coupons (title, icon, from_partner, to_partner, is_redeemed) VALUES (?, ?, ?, ?, 0)",
+              (c_item.title, c_item.icon or "🎁", c_item.from_partner, c_item.to_partner))
+    conn.commit()
+    new_id = c.lastrowid
+    conn.close()
+    return {"id": new_id, **c_item.dict()}
+
+@app.put("/api/coupons/{coupon_id}/redeem")
+def redeem_coupon(coupon_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    now = datetime.now().strftime("%d.%m.%Y %H:%M")
+    c.execute("UPDATE coupons SET is_redeemed = 1, redeemed_at = ? WHERE id = ?", (now, coupon_id))
+    conn.commit()
+    conn.close()
+    return {"success": True, "redeemed_at": now}
+
+@app.delete("/api/coupons/{coupon_id}")
+def delete_coupon(coupon_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM coupons WHERE id = ?", (coupon_id,))
+    conn.commit()
+    conn.close()
+    return {"success": True}
+
+# --- API Routen: Most Likely To Game (Wer von uns beiden eher...?) ---
+@app.get("/api/most-likely")
+def get_most_likely_votes():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT question_id, partner, vote, created_at FROM most_likely")
+    rows = c.fetchall()
+    conn.close()
+    result = {}
+    for r in rows:
+        qid = r[0]
+        if qid not in result:
+            result[qid] = {}
+        result[qid][r[1]] = {"vote": r[2], "created_at": r[3]}
+    return result
+
+@app.post("/api/most-likely/vote")
+def vote_most_likely(vote: MostLikelyVote):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    now = datetime.now().strftime("%d.%m.%Y %H:%M")
+    c.execute('''
+        INSERT INTO most_likely (question_id, partner, vote, created_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(question_id, partner) DO UPDATE SET
+            vote=excluded.vote,
+            created_at=excluded.created_at
+    ''', (vote.question_id, vote.partner, vote.vote, now))
+    conn.commit()
+    conn.close()
+    return {"success": True, "vote": vote.vote}
+
+# --- API Routen: Date-Roulette Ideas ---
+@app.get("/api/date-ideas")
+def get_date_ideas():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT id, title, category, is_custom FROM date_ideas ORDER BY id DESC")
+    ideas = [{
+        "id": row[0],
+        "title": row[1],
+        "category": row[2],
+        "is_custom": bool(row[3])
+    } for row in c.fetchall()]
+    conn.close()
+    return ideas
+
+@app.post("/api/date-ideas")
+def add_date_idea(idea: DateIdeaItem):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT INTO date_ideas (title, category, is_custom) VALUES (?, ?, 1)",
+              (idea.title, idea.category))
+    conn.commit()
+    new_id = c.lastrowid
+    conn.close()
+    return {"id": new_id, **idea.dict(), "is_custom": True}
+
+# --- API Routen: Time-Capsule Letters (Zeitschloss-Liebesbriefe) ---
+@app.get("/api/letters")
+def get_letters():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT id, title, content, author, unlock_type, unlock_condition, is_opened, created_at FROM letters ORDER BY id DESC")
+    letters = [{
+        "id": row[0],
+        "title": row[1],
+        "content": row[2],
+        "author": row[3],
+        "unlock_type": row[4],
+        "unlock_condition": row[5],
+        "is_opened": bool(row[6]),
+        "created_at": row[7]
+    } for row in c.fetchall()]
+    conn.close()
+    return letters
+
+@app.post("/api/letters")
+def add_letter(letter: LetterItem):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    now = datetime.now().strftime("%d.%m.%Y")
+    c.execute("INSERT INTO letters (title, content, author, unlock_type, unlock_condition, is_opened, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)",
+              (letter.title, letter.content, letter.author, letter.unlock_type, letter.unlock_condition, now))
+    conn.commit()
+    new_id = c.lastrowid
+    conn.close()
+    return {"id": new_id, **letter.dict(), "is_opened": False, "created_at": now}
+
+@app.put("/api/letters/{letter_id}/open")
+def open_letter(letter_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE letters SET is_opened = 1 WHERE id = ?", (letter_id,))
+    conn.commit()
+    conn.close()
+    return {"success": True}
 
 # --- API Routen: Live Location & GPS Tracking ---
 @app.get("/api/location")

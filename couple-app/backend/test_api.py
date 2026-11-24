@@ -20,7 +20,11 @@ from main import (
     MoodEntry, update_mood, get_moods,
     QuizAnswerSubmission, submit_quiz_answer, get_quiz_answers,
     ProfileUpdate, update_profile, get_profile, send_hug,
-    LocationUpdate, get_locations, update_location
+    LocationUpdate, get_locations, update_location,
+    CouponItem, get_coupons, add_coupon, redeem_coupon,
+    MostLikelyVote, get_most_likely_votes, vote_most_likely,
+    DateIdeaItem, get_date_ideas, add_date_idea,
+    LetterItem, get_letters, add_letter, open_letter
 )
 
 init_db()
@@ -161,6 +165,40 @@ def test_live_location():
     assert locs["Partner A"]["is_charging"] is False
     print("  -> Live Location OK")
 
+def test_new_features():
+    print("[TEST] Coupons...")
+    c_res = add_coupon(CouponItem(title="1x Massage", icon="💆"))
+    c_id = c_res["id"]
+    coupons = get_coupons()
+    assert any(c["id"] == c_id for c in coupons)
+    redeem_coupon(c_id)
+    coupons_after = get_coupons()
+    redeemed = next(c for c in coupons_after if c["id"] == c_id)
+    assert redeemed["is_redeemed"] is True
+    print("  -> Coupons OK")
+
+    print("[TEST] Most Likely...")
+    vote_most_likely(MostLikelyVote(question_id="ml1", partner="Partner A", vote="Partner B"))
+    votes = get_most_likely_votes()
+    assert "ml1" in votes
+    assert votes["ml1"]["Partner A"]["vote"] == "Partner B"
+    print("  -> Most Likely OK")
+
+    print("[TEST] Date Ideas...")
+    add_date_idea(DateIdeaItem(title="Kino", category="Draußen"))
+    ideas = get_date_ideas()
+    assert any(i["title"] == "Kino" for i in ideas)
+    print("  -> Date Ideas OK")
+
+    print("[TEST] Letters...")
+    l_res = add_letter(LetterItem(title="Geheim", content="Ich liebe dich", author="Partner A", unlock_type="date", unlock_condition="2026-12-24"))
+    l_id = l_res["id"]
+    open_letter(l_id)
+    letters = get_letters()
+    opened = next(l for l in letters if l["id"] == l_id)
+    assert opened["is_opened"] is True
+    print("  -> Letters OK")
+
 if __name__ == "__main__":
     try:
         test_events()
@@ -171,6 +209,7 @@ if __name__ == "__main__":
         test_countdown()
         test_mood_and_quiz_and_profile()
         test_live_location()
+        test_new_features()
         print("\n[SUCCESS] Alle Backend-Funktionen und SQLite-Queries vollstaendig verifiziert!")
     finally:
         import shutil

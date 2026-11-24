@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Heart, Sparkles, Send, Utensils, Calendar, CheckSquare, MessageCircleHeart, Cake, Navigation } from 'lucide-react';
-import type { ProfileData, MoodData, CountdownItem, EventItem, MealItem, NoteItem, UserRole, LiveLocation } from '../types';
+import { Heart, Sparkles, Send, Utensils, Calendar, CheckSquare, Cake } from 'lucide-react';
+import type { ProfileData, MoodData, CountdownItem, EventItem, MealItem, UserRole } from '../types';
 
 const EMOJI_OPTIONS = ['🥰', '😊', '😴', '🥳', '😭', '🥺', '☕', '🍕', '🤒'];
 
@@ -12,8 +12,6 @@ interface DashboardProps {
   countdown: CountdownItem;
   events: EventItem[];
   meals: MealItem[];
-  notes: NoteItem[];
-  locations?: Record<string, LiveLocation>;
   onUpdateMood: (emoji: string, text: string) => void;
   onSendHug: () => void;
   onNavigateTab: (tab: string) => void;
@@ -48,8 +46,6 @@ export default function Dashboard({
   countdown,
   events,
   meals,
-  notes,
-  locations,
   onUpdateMood,
   onSendHug,
   onNavigateTab
@@ -94,24 +90,6 @@ export default function Dashboard({
     nextBirthdayInfo = { name: profile.partner_a_name || 'Partner A', ...partnerABday };
   } else if (partnerBBday) {
     nextBirthdayInfo = { name: profile.partner_b_name || 'Partner B', ...partnerBBday };
-  }
-
-  // Live Location details
-  const myLoc = locations?.[role || 'Partner A'];
-  const partnerLoc = locations?.[partnerRole];
-  let distanceBetweenKm: number | null = null;
-  if (myLoc && partnerLoc) {
-    const R = 6371;
-    const dLat = ((partnerLoc.latitude - myLoc.latitude) * Math.PI) / 180;
-    const dLon = ((partnerLoc.longitude - myLoc.longitude) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((myLoc.latitude * Math.PI) / 180) *
-        Math.cos((partnerLoc.latitude * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    distanceBetweenKm = Math.round(R * c * 10) / 10;
   }
 
   const handleSaveMood = () => {
@@ -190,38 +168,34 @@ export default function Dashboard({
         </div>
       )}
 
-      {/* Live GPS & Karte Widget auf dem Dashboard */}
+      {/* Date-Night Roulette Banner */}
       <div
-        onClick={() => onNavigateTab('map')}
+        onClick={() => onNavigateTab('calendar')}
         className="cursor-pointer glass-panel p-3.5 rounded-2xl shadow-xs border border-pink-200/90 hover:border-pink-300 transition-all flex items-center justify-between active:scale-98 group"
       >
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-500 to-purple-400 text-white flex items-center justify-center shrink-0 shadow-xs">
-            <Navigation size={20} className="animate-pulse" />
+            <span className="text-xl">🎡</span>
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-black uppercase text-pink-600 tracking-wide">
-                Live GPS & Karte
+                Date-Night Roulette
               </span>
-              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-ping" />
+              <span className="bg-pink-100 text-pink-600 text-[8px] font-black px-1.5 py-0.2 rounded-full">Neu</span>
             </div>
             <h4 className="font-black text-xs text-gray-800 truncate">
-              {partnerLoc
-                ? `${partnerName} • ${partnerLoc.speed && partnerLoc.speed > 5 ? `Fährt ${Math.round(partnerLoc.speed)} km/h 🚗` : 'Vor Ort 🏠'}`
-                : `Standort von ${partnerName}`}
+              Was machen wir heute Schönes?
             </h4>
             <p className="text-[10px] text-gray-500 truncate">
-              {distanceBetweenKm !== null
-                ? `${distanceBetweenKm === 0 ? 'Am selben Ort 💕' : `${distanceBetweenKm} km entfernt`} • 🔋 ${partnerLoc?.battery_level || 85}%`
-                : 'Tippen um Live-Karte & Tempo zu öffnen →'}
+              Tippen, um am Date-Glücksrad zu drehen! 🎲
             </p>
           </div>
         </div>
 
         <div className="shrink-0 pl-2">
           <span className="bg-pink-100 group-hover:bg-pink-200 text-pink-700 font-extrabold text-[11px] px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1">
-            Karte 🗺️
+            Drehen 🎡
           </span>
         </div>
       </div>
@@ -377,19 +351,17 @@ export default function Dashboard({
           <span className="text-[9px] text-gray-400 block truncate">Zur Einkaufsliste</span>
         </div>
 
-        {/* Notes shortcut */}
+        {/* Coupons shortcut */}
         <div
           onClick={() => onNavigateTab('lists')}
           className="glass-panel p-3 rounded-2xl cursor-pointer hover:bg-white/95 transition-all border border-pink-50 min-w-0"
         >
           <div className="flex items-center gap-1.5 mb-1 text-amber-500">
-            <MessageCircleHeart size={14} className="shrink-0" />
-            <span className="text-[11px] font-extrabold text-gray-600 truncate">Liebeszettel</span>
+            <span className="text-sm shrink-0">🎟️</span>
+            <span className="text-[11px] font-extrabold text-gray-600 truncate">Gutscheine</span>
           </div>
-          <p className="text-xs font-bold text-gray-800 truncate">
-            {notes.length > 0 ? notes[0].content : 'Notiz schreiben'}
-          </p>
-          <span className="text-[9px] text-gray-400 block truncate">{notes.length} Zettel angepinnt</span>
+          <p className="text-xs font-bold text-gray-800 truncate">Liebes-Coupons</p>
+          <span className="text-[9px] text-gray-400 block truncate">Jetzt einlösen →</span>
         </div>
       </div>
     </div>

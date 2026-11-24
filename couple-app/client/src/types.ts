@@ -6,22 +6,10 @@ export interface ProfileData {
   start_date: string;
   partner_a_birthday?: string;
   partner_b_birthday?: string;
-  partner_a_city: string;
-  partner_b_city: string;
+  partner_a_city?: string;
+  partner_b_city?: string;
   hugs_count: number;
   setup_completed?: boolean | string;
-}
-
-export interface LiveLocation {
-  partner: string;
-  latitude: number;
-  longitude: number;
-  accuracy?: number;
-  speed?: number; // km/h
-  heading?: number;
-  battery_level?: number;
-  is_charging?: boolean;
-  updated_at: string;
 }
 
 export interface MoodData {
@@ -42,7 +30,7 @@ export interface MealItem {
   id?: number;
   day: string; // 'Montag', 'Dienstag', ...
   meal_name: string;
-  cook?: string; // 'Partner A', 'Partner B', 'Beide', 'Restaurant'
+  cook?: string;
   notes?: string;
 }
 
@@ -91,4 +79,37 @@ export interface QuestionWithAnswers {
   answers: {
     [partner: string]: QuizAnswer;
   };
+}
+
+export interface CouponItem {
+  id: number;
+  title: string;
+  icon: string;
+  from_partner: string;
+  to_partner: string;
+  is_redeemed: boolean;
+  redeemed_at?: string;
+}
+
+export interface MostLikelyVote {
+  vote: string;
+  created_at: string;
+}
+
+export interface DateIdeaItem {
+  id: number;
+  title: string;
+  category: string;
+  is_custom: boolean;
+}
+
+export interface LetterItem {
+  id: number;
+  title: string;
+  content: string;
+  author: string;
+  unlock_type: string;
+  unlock_condition: string;
+  is_opened: boolean;
+  created_at: string;
 }
