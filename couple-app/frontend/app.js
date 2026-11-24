@@ -6,7 +6,20 @@ const DAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samsta
 // Zentraler API-Request-Helper mit aussagekraeftiger Fehlerbehandlung
 async function apiRequest(endpoint, options = {}) {
     const url = `${API_BASE}${endpoint}`;
-    const res = await fetch(url, options);
+    
+    // Verhindere Caching in mobilen Browsern
+    const fetchOptions = {
+        ...options,
+        cache: 'no-store',
+        headers: {
+            ...options.headers,
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+        }
+    };
+
+    const res = await fetch(url, fetchOptions);
     if (!res.ok) {
         let err = await res.text();
         try {
