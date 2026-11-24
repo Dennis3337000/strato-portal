@@ -2,9 +2,17 @@
 echo "=== 1. Erstelle gemeinsames Netzwerk ==="
 docker network create shared-strato-network || true
 
+# Ermittle modernen Docker Compose Befehl
+if docker compose version &>/dev/null; then
+    COMPOSE="docker compose"
+else
+    COMPOSE="docker-compose"
+fi
+echo "Verwende Compose Befehl: $COMPOSE"
+
 echo "=== 2. Passe CryptoAnalyzer an ==="
 cd /root/CryptoAnalyzer || cd ~/CryptoAnalyzer
-docker-compose down
+$COMPOSE down || true
 
 # Ersetze Ports in der compose Datei (Port 80 blockieren)
 sed -i 's/ports:/#ports:/g' docker-compose.yml
@@ -17,18 +25,16 @@ networks:
   shared-strato-network:
     external: true' >> docker-compose.yml
 
-# Füge das Netzwerk zum Service hinzu (unter restart oder image, je nachdem was da ist)
 grep -q "\- shared-strato-network" docker-compose.yml || sed -i '/restart: always/a\    networks:\n      - shared-strato-network' docker-compose.yml
 
-# Service umbenennen zu 'cryptoanalyzer', damit Nginx ihn findet
 sed -i 's/services:/services:\n  cryptoanalyzer:\n    extends:\n      service: app/' docker-compose.yml
 
-docker-compose up -d
+$COMPOSE up -d
 
 echo "=== 3. Lade Strato-Portal neu ==="
 cd /root/strato-portal || cd ~/strato-portal
 git pull
-docker-compose down
-docker-compose up -d --build
+$COMPOSE down || true
+$COMPOSE up -d --build
 
 echo "=== FERTIG! Dein Portal sollte jetzt online sein. ==="
