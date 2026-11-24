@@ -228,14 +228,138 @@ export default function App() {
       const next = !prev;
       localStorage.setItem('cl_share_location', String(next));
       showToast(next ? 'Live-Standort teilen aktiviert 🟢' : 'Standort-Freigabe pausiert ⏸️');
+      if (next) {
+        requestRealGPSLocation();
+      }
       return next;
     });
   };
 
-  const handleSendManualLocation = async (lat: number, lon: number, speed: number = 0) => {
-    const targetPartner = role === 'Partner A' ? 'Partner B' : 'Partner A';
+  const [isAcquiringGPS, setIsAcquiringGPS] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState<string | null>(null);
+
+  const requestRealGPSLocation = async () => {
+    setIsAcquiringGPS(true);
+    setGpsStatus('Ermittle Telefon-Standort...');
+    showToast('📡 Ermittle echten Handy-Standort...');
+
+    const currentPartner = role || 'Partner A';
+
+    let batteryLevel: number | undefined = undefined;
+    let isCharging: boolean | undefined = undefined;
+    try {
+      if ('getBattery' in navigator) {
+        const b: any = await (navigator as any).getBattery();
+        batteryLevel = Math.round(b.level * 100);
+        isCharging = b.charging;
+      }
+    } catch {}
+
+    const saveAndApply = async (lat: number, lon: number, accuracy: number, speed: number = 0, source: string) => {
+      await api.updateLiveLocation({
+        partner: currentPartner,
+        latitude: lat,
+        longitude: lon,
+        accuracy,
+        speed,
+        heading: 0,
+        battery_level: batteryLevel,
+        is_charging: isCharging
+      });
+
+      setLocations(prev => ({
+        ...prev,
+        [currentPartner]: {
+          partner: currentPartner,
+          latitude: lat,
+          longitude: lon,
+          accuracy,
+          speed,
+          heading: 0,
+          battery_level: batteryLevel,
+          is_charging: isCharging,
+          updated_at: 'Gerade eben'
+        }
+      }));
+
+      setIsAcquiringGPS(false);
+      setGpsStatus(`Standort erfasst (${source})`);
+      showToast(`📍 Standort erfolgreich erfasst (${source})!`);
+    };
+
+    // 1. Try Hardware GPS (High Accuracy)
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          const accuracy = Math.round(pos.coords.accuracy || 10);
+          const speed =
+            pos.coords.speed !== null && pos.coords.speed !== undefined && pos.coords.speed >= 0
+              ? Math.round(pos.coords.speed * 3.6)
+              : 0;
+          saveAndApply(lat, lon, accuracy, speed, 'Handy-GPS');
+        },
+        async (err) => {
+          console.warn('High-accuracy GPS failed, trying cellular/wifi:', err.message);
+          // 2. Try Low Accuracy (Cellular/Wifi)
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              const lat = pos.coords.latitude;
+              const lon = pos.coords.longitude;
+              const accuracy = Math.round(pos.coords.accuracy || 50);
+              saveAndApply(lat, lon, accuracy, 0, 'Mobilfunk/WLAN');
+            },
+            async (err2) => {
+              console.warn('Browser GPS denied or blocked (e.g. HTTP):', err2.message);
+              // 3. Fallback: IP-based real coordinates
+              try {
+                const res = await fetch('https://ipwho.is/');
+                if (res.ok) {
+                  const data = await res.json();
+                  if (data && data.latitude && data.longitude) {
+                    saveAndApply(data.latitude, data.longitude, 1000, 0, data.city || 'Netzwerk-Ortung');
+                    return;
+                  }
+                }
+              } catch {}
+
+              setIsAcquiringGPS(false);
+              setGpsStatus('GPS blockiert. Bitte Standortzugriff im Browser erlauben!');
+              showToast('⚠️ Bitte im Browser den Standortzugriff erlauben!');
+            },
+            { enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 }
+          );
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
+    } else {
+      try {
+        const res = await fetch('https://ipwho.is/');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.latitude && data.longitude) {
+            saveAndApply(data.latitude, data.longitude, 1000, 0, data.city || 'Netzwerk-Ortung');
+            return;
+          }
+        }
+      } catch {}
+      setIsAcquiringGPS(false);
+      showToast('⚠️ Geolocation wird von diesem Browser nicht unterstützt');
+    }
+  };
+
+  // Run initial real GPS acquisition once on startup
+  useEffect(() => {
+    if (isSharingLocation) {
+      requestRealGPSLocation();
+    }
+  }, []);
+
+  const handleSendManualLocation = async (lat: number, lon: number, speed: number = 0, targetPartner?: string) => {
+    const partnerToUpdate = targetPartner || (role === 'Partner A' ? 'Partner B' : 'Partner A');
     await api.updateLiveLocation({
-      partner: targetPartner,
+      partner: partnerToUpdate,
       latitude: lat,
       longitude: lon,
       accuracy: 8,
@@ -245,8 +369,8 @@ export default function App() {
     });
     setLocations(prev => ({
       ...prev,
-      [targetPartner]: {
-        partner: targetPartner,
+      [partnerToUpdate]: {
+        partner: partnerToUpdate,
         latitude: lat,
         longitude: lon,
         accuracy: 8,
@@ -256,7 +380,7 @@ export default function App() {
         updated_at: 'Gerade eben'
       }
     }));
-    showToast(`Test-Standort von ${targetPartner} aktualisiert! (${speed} km/h 🚗)`);
+    showToast(`Standort von ${partnerToUpdate} gesetzt!`);
   };
 
   const handleCompleteOnboarding = async (completedProfile: ProfileData, selectedRole: UserRole) => {
@@ -506,7 +630,10 @@ export default function App() {
             profile={profile}
             role={role}
             isSharingLocation={isSharingLocation}
+            isAcquiringGPS={isAcquiringGPS}
+            gpsStatusMessage={gpsStatus}
             onToggleSharing={handleToggleSharing}
+            onRequestGPS={requestRealGPSLocation}
             onSendManualLocation={handleSendManualLocation}
             onUpdateCity={handleUpdateProfileKey}
             onSendHug={handleSendHug}

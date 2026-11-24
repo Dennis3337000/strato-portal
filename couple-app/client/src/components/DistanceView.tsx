@@ -8,8 +8,11 @@ interface DistanceViewProps {
   profile: ProfileData;
   role: UserRole;
   isSharingLocation: boolean;
+  isAcquiringGPS: boolean;
+  gpsStatusMessage?: string | null;
   onToggleSharing: () => void;
-  onSendManualLocation: (lat: number, lon: number, speed?: number) => void;
+  onRequestGPS: () => void;
+  onSendManualLocation: (lat: number, lon: number, speed?: number, targetPartner?: string) => void;
   onUpdateCity: (partnerKey: 'partner_a_city' | 'partner_b_city', city: string) => void;
   onSendHug: () => void;
 }
@@ -66,7 +69,10 @@ export default function DistanceView({
   profile,
   role,
   isSharingLocation,
+  isAcquiringGPS,
+  gpsStatusMessage,
   onToggleSharing,
+  onRequestGPS,
   onSendManualLocation,
   onUpdateCity,
   onSendHug
@@ -138,7 +144,10 @@ export default function DistanceView({
           role={role}
           profile={profile}
           isSharingLocation={isSharingLocation}
+          isAcquiringGPS={isAcquiringGPS}
+          gpsStatusMessage={gpsStatusMessage}
           onToggleSharing={onToggleSharing}
+          onRequestGPS={onRequestGPS}
           onSendManualLocation={onSendManualLocation}
         />
       )}

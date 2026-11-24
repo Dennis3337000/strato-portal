@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -11,7 +11,11 @@ import {
   Heart,
   Car,
   Footprints,
-  Home
+  Home,
+  Navigation,
+  Check,
+  X,
+  RefreshCw
 } from 'lucide-react';
 import type { LiveLocation, ProfileData, UserRole } from '../types';
 
@@ -20,8 +24,11 @@ interface LiveMapViewProps {
   role: UserRole;
   profile: ProfileData;
   isSharingLocation: boolean;
+  isAcquiringGPS: boolean;
+  gpsStatusMessage?: string | null;
   onToggleSharing: () => void;
-  onSendManualLocation: (lat: number, lon: number, speed?: number) => void;
+  onRequestGPS: () => void;
+  onSendManualLocation: (lat: number, lon: number, speed?: number, targetPartner?: string) => void;
 }
 
 function calculateDistanceInKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -43,13 +50,18 @@ export default function LiveMapView({
   role,
   profile,
   isSharingLocation,
+  isAcquiringGPS,
+  gpsStatusMessage,
   onToggleSharing,
+  onRequestGPS,
   onSendManualLocation
 }: LiveMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<{ [key: string]: L.Marker }>({});
   const polylineRef = useRef<L.Polyline | null>(null);
+
+  const [pendingPin, setPendingPin] = useState<{ lat: number; lon: number } | null>(null);
 
   const currentRole = role || 'Partner A';
   const partnerRole = currentRole === 'Partner A' ? 'Partner B' : 'Partner A';
@@ -82,7 +94,7 @@ export default function LiveMapView({
     speedLabel = `Unterwegs (${Math.round(partnerSpeed)} km/h)`;
     SpeedIcon = Footprints;
   } else if (partnerSpeed > 0) {
-    speedLabel = `Langsam (${Math.round(partnerSpeed)} km/h)`;
+    speedLabel = `Geht (${Math.round(partnerSpeed)} km/h)`;
     SpeedIcon = Footprints;
   }
 
@@ -95,29 +107,28 @@ export default function LiveMapView({
         ? [myLocation.latitude, myLocation.longitude]
         : partnerLocation
         ? [partnerLocation.latitude, partnerLocation.longitude]
-        : [51.1657, 10.4515]; // Center of Germany
+        : [51.1657, 10.4515];
 
       const map = L.map(mapContainerRef.current, {
         center: initialCenter,
-        zoom: 7,
+        zoom: 12,
         zoomControl: false,
         attributionControl: false
       });
 
-      // Add OpenStreetMap tiles
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19
       }).addTo(map);
 
-      // Compact zoom controls at bottom-right
       L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+      // Allow clicking on map to reposition manually
+      map.on('click', (e: L.LeafletMouseEvent) => {
+        setPendingPin({ lat: e.latlng.lat, lon: e.latlng.lng });
+      });
 
       mapInstanceRef.current = map;
     }
-
-    return () => {
-      // Keep map instance alive across fast re-renders
-    };
   }, []);
 
   // Update Markers and Connecting Line
@@ -127,7 +138,6 @@ export default function LiveMapView({
 
     const coords: [number, number][] = [];
 
-    // Helper to create custom HTML DivIcon
     const createMarkerIcon = (isMe: boolean, name: string) => {
       const bgGradient = isMe
         ? 'linear-gradient(135deg, #ff758c 0%, #ff7eb3 100%)'
@@ -145,7 +155,6 @@ export default function LiveMapView({
               box-shadow: 0 4px 14px rgba(0,0,0,0.25);
               display: flex; align-items: center; justify-content: center;
               color: white; font-weight: 900; font-size: 16px;
-              animation: markerPulse 2s infinite ease-in-out;
             ">
               ${initial}
             </div>
@@ -212,13 +221,15 @@ export default function LiveMapView({
   // Map Controls
   const zoomToMe = () => {
     if (myLocation && mapInstanceRef.current) {
-      mapInstanceRef.current.flyTo([myLocation.latitude, myLocation.longitude], 14, { duration: 1 });
+      mapInstanceRef.current.flyTo([myLocation.latitude, myLocation.longitude], 15, { duration: 1 });
+    } else {
+      onRequestGPS();
     }
   };
 
   const zoomToPartner = () => {
     if (partnerLocation && mapInstanceRef.current) {
-      mapInstanceRef.current.flyTo([partnerLocation.latitude, partnerLocation.longitude], 14, { duration: 1 });
+      mapInstanceRef.current.flyTo([partnerLocation.latitude, partnerLocation.longitude], 15, { duration: 1 });
     }
   };
 
@@ -228,8 +239,15 @@ export default function LiveMapView({
         [myLocation.latitude, myLocation.longitude],
         [partnerLocation.latitude, partnerLocation.longitude]
       ]);
-      mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+      mapInstanceRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
     }
+  };
+
+  // Confirm manual map click
+  const handleConfirmManualPin = () => {
+    if (!pendingPin) return;
+    onSendManualLocation(pendingPin.lat, pendingPin.lon, 0, currentRole);
+    setPendingPin(null);
   };
 
   // Simulation: Move Partner slightly to demonstrate real-time live speed & movement
@@ -237,11 +255,12 @@ export default function LiveMapView({
     if (!partnerLocation) return;
     const randomOffsetLat = (Math.random() - 0.5) * 0.008;
     const randomOffsetLon = (Math.random() - 0.5) * 0.008;
-    const simulatedSpeed = Math.floor(20 + Math.random() * 45); // 20-65 km/h
+    const simulatedSpeed = Math.floor(25 + Math.random() * 40); // 25-65 km/h
     onSendManualLocation(
       partnerLocation.latitude + randomOffsetLat,
       partnerLocation.longitude + randomOffsetLon,
-      simulatedSpeed
+      simulatedSpeed,
+      partnerRole
     );
   };
 
@@ -267,6 +286,33 @@ export default function LiveMapView({
           <div className={`w-2 h-2 rounded-full ${isSharingLocation ? 'bg-emerald-500 animate-ping' : 'bg-gray-400'}`} />
           <span>{isSharingLocation ? 'Live AN' : 'Live AUS'}</span>
         </button>
+      </div>
+
+      {/* Prominent Direct Phone GPS Trigger Button */}
+      <div className="space-y-1">
+        <button
+          type="button"
+          onClick={onRequestGPS}
+          disabled={isAcquiringGPS}
+          className="w-full bg-gradient-to-r from-pink-500 via-rose-400 to-purple-500 text-white py-2.5 px-4 rounded-2xl text-xs font-black shadow-md flex items-center justify-center gap-2 active:scale-98 transition-all disabled:opacity-80"
+        >
+          {isAcquiringGPS ? (
+            <>
+              <RefreshCw size={15} className="animate-spin" />
+              <span>Lese Telefon-GPS aus...</span>
+            </>
+          ) : (
+            <>
+              <Navigation size={15} />
+              <span>📡 Meinen echten Telefon-Standort jetzt erfassen</span>
+            </>
+          )}
+        </button>
+        {gpsStatusMessage && (
+          <p className="text-[10px] text-center font-bold text-gray-500">
+            {gpsStatusMessage}
+          </p>
+        )}
       </div>
 
       {/* Interactive Leaflet Map Container */}
@@ -312,7 +358,41 @@ export default function LiveMapView({
             </span>
           </div>
         )}
+
+        {/* Floating Manual Pin Confirmation Overlay if tapped on map */}
+        {pendingPin && (
+          <div className="absolute bottom-3 left-3 right-3 z-20 bg-white/95 backdrop-blur-md p-3 rounded-2xl shadow-xl border border-pink-200 flex items-center justify-between gap-2 animate-in">
+            <div className="min-w-0">
+              <span className="text-[11px] font-black text-gray-800 block truncate">
+                📍 Auf Karte getippt
+              </span>
+              <span className="text-[10px] text-gray-500 block truncate">
+                Standort von {myName} hierher setzen?
+              </span>
+            </div>
+            <div className="flex gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setPendingPin(null)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-xl bg-gray-100 text-xs"
+              >
+                <X size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmManualPin}
+                className="bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-xs font-black shadow-xs flex items-center gap-1"
+              >
+                <Check size={14} /> Setzen
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      <p className="text-[10px] text-center text-gray-400">
+        💡 Tipp: Du kannst auch einfach auf die Karte tippen, um deinen Pin manuell zu verschieben!
+      </p>
 
       {/* Partner Live Status Card */}
       {partnerLocation && (
@@ -379,7 +459,7 @@ export default function LiveMapView({
       <div className="glass-panel p-3 rounded-2xl shadow-xs flex items-center justify-between gap-2">
         <div className="min-w-0">
           <span className="text-[10px] font-black text-gray-700 block truncate">
-            🧪 Bewegungssimulation testen
+            🧪 Fahrt-Simulation
           </span>
           <p className="text-[9px] text-gray-400 truncate">
             Simuliert eine Fahrt von {partnerName} mit GPS-Tempo
