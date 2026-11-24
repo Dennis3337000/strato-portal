@@ -10,7 +10,8 @@ import type {
   QuestionWithAnswers,
   CouponItem,
   DateIdeaItem,
-  LetterItem
+  LetterItem,
+  PhotoItem
 } from './types';
 
 // Relative path so it works seamlessly under /couple/ or /
@@ -608,5 +609,76 @@ export const api = {
     const updated = list.map(l => l.id === id ? { ...l, is_opened: true } : l);
     setLocal('letters', updated);
     await fetchWithFallback(`letters/${id}/open`, { method: 'PUT' });
+  },
+
+  // Photos (Fotowand & Momente)
+  async getPhotos(): Promise<PhotoItem[]> {
+    return await fetchWithFallback<PhotoItem[]>('photos', undefined, 'photos', [
+      {
+        id: 1,
+        title: 'Kuscheliger Sonntag ☕❤️',
+        image_data: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?auto=format&fit=crop&w=600&q=80',
+        author: 'Partner A',
+        likes: 12,
+        created_at: 'Gestern'
+      },
+      {
+        id: 2,
+        title: 'Spaziergang zu zweit 🍁',
+        image_data: 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?auto=format&fit=crop&w=600&q=80',
+        author: 'Partner B',
+        likes: 8,
+        created_at: 'Letzte Woche'
+      }
+    ]);
+  },
+
+  async addPhoto(photo: Omit<PhotoItem, 'id' | 'likes' | 'created_at'>): Promise<PhotoItem> {
+    const list = getLocal<PhotoItem[]>('photos', []);
+    const now = 'Heute';
+    const newItem: PhotoItem = { id: Date.now(), ...photo, likes: 0, created_at: now };
+    setLocal('photos', [newItem, ...list]);
+
+    try {
+      const res = await fetch(`${BASE_URL}/photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(photo)
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setLocal('photos', [created, ...list]);
+        return created;
+      }
+    } catch {}
+    return newItem;
+  },
+
+  async likePhoto(id: number): Promise<number> {
+    const list = getLocal<PhotoItem[]>('photos', []);
+    let newLikes = 1;
+    const updated = list.map(p => {
+      if (p.id === id) {
+        newLikes = (p.likes || 0) + 1;
+        return { ...p, likes: newLikes };
+      }
+      return p;
+    });
+    setLocal('photos', updated);
+
+    try {
+      const res = await fetch(`${BASE_URL}/photos/${id}/like`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        return data.likes;
+      }
+    } catch {}
+    return newLikes;
+  },
+
+  async deletePhoto(id: number): Promise<void> {
+    const list = getLocal<PhotoItem[]>('photos', []);
+    setLocal('photos', list.filter(p => p.id !== id));
+    await fetchWithFallback(`photos/${id}`, { method: 'DELETE' });
   }
 };

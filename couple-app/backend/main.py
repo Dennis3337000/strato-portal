@@ -168,6 +168,16 @@ def init_db():
             created_at TEXT NOT NULL
         )
     ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS photos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT,
+            image_data TEXT NOT NULL,
+            author TEXT NOT NULL,
+            likes INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL
+        )
+    ''')
 
     # Seed Default Coupons falls noch nicht vorhanden
     default_coupons = [
@@ -380,6 +390,11 @@ class LetterItem(BaseModel):
     author: str
     unlock_type: str
     unlock_condition: str
+
+class PhotoCreate(BaseModel):
+    title: Optional[str] = ""
+    image_data: str
+    author: str
 
 # --- API Routen: Shopping List ---
 @app.get("/api/shopping")
@@ -835,6 +850,55 @@ def open_letter(letter_id: int):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("UPDATE letters SET is_opened = 1 WHERE id = ?", (letter_id,))
+    conn.commit()
+    conn.close()
+    return {"success": True}
+
+# --- API Routen: Photo Wall (Fotowand & Momente) ---
+@app.get("/api/photos")
+def get_photos():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT id, title, image_data, author, likes, created_at FROM photos ORDER BY id DESC")
+    photos = [{
+        "id": row[0],
+        "title": row[1] or "",
+        "image_data": row[2],
+        "author": row[3],
+        "likes": row[4] or 0,
+        "created_at": row[5]
+    } for row in c.fetchall()]
+    conn.close()
+    return photos
+
+@app.post("/api/photos")
+def add_photo(photo: PhotoCreate):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    now = datetime.now().strftime("%d.%m.%Y")
+    c.execute("INSERT INTO photos (title, image_data, author, likes, created_at) VALUES (?, ?, ?, 0, ?)",
+              (photo.title or "", photo.image_data, photo.author, now))
+    conn.commit()
+    new_id = c.lastrowid
+    conn.close()
+    return {"id": new_id, "title": photo.title or "", "image_data": photo.image_data, "author": photo.author, "likes": 0, "created_at": now}
+
+@app.post("/api/photos/{photo_id}/like")
+def like_photo(photo_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE photos SET likes = likes + 1 WHERE id = ?", (photo_id,))
+    conn.commit()
+    c.execute("SELECT likes FROM photos WHERE id = ?", (photo_id,))
+    row = c.fetchone()
+    conn.close()
+    return {"likes": row[0] if row else 1}
+
+@app.delete("/api/photos/{photo_id}")
+def delete_photo(photo_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM photos WHERE id = ?", (photo_id,))
     conn.commit()
     conn.close()
     return {"success": True}

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { ShoppingBag, Heart, Plus, Trash2, Check, Gift, Mail } from 'lucide-react';
-import type { ShoppingItem, BucketItem, NoteItem, CouponItem, LetterItem, ProfileData, UserRole } from '../types';
+import { ShoppingBag, Heart, Plus, Trash2, Check, Gift, Mail, Camera } from 'lucide-react';
+import type { ShoppingItem, BucketItem, NoteItem, CouponItem, LetterItem, PhotoItem, ProfileData, UserRole } from '../types';
 import LoveCoupons from './LoveCoupons';
 import TimeCapsuleLetters from './TimeCapsuleLetters';
+import PhotoWall from './PhotoWall';
 
 interface ListsViewProps {
   shopping: ShoppingItem[];
@@ -10,6 +11,7 @@ interface ListsViewProps {
   notes: NoteItem[];
   coupons?: CouponItem[];
   letters?: LetterItem[];
+  photos?: PhotoItem[];
   profile: ProfileData;
   role: UserRole;
   onAddShopping: (item: string, category: string) => void;
@@ -25,6 +27,9 @@ interface ListsViewProps {
   onDeleteCoupon?: (id: number) => void;
   onOpenLetter?: (id: number) => void;
   onAddLetter?: (title: string, content: string, author: string, unlockType: string, unlockCondition: string) => void;
+  onAddPhoto?: (title: string, imageData: string, author: string) => void;
+  onLikePhoto?: (id: number) => void;
+  onDeletePhoto?: (id: number) => void;
 }
 
 export default function ListsView({
@@ -33,6 +38,7 @@ export default function ListsView({
   notes,
   coupons = [],
   letters = [],
+  photos = [],
   profile,
   role,
   onAddShopping,
@@ -47,9 +53,12 @@ export default function ListsView({
   onAddCoupon = () => {},
   onDeleteCoupon = () => {},
   onOpenLetter = () => {},
-  onAddLetter = () => {}
+  onAddLetter = () => {},
+  onAddPhoto = () => {},
+  onLikePhoto = () => {},
+  onDeletePhoto = () => {}
 }: ListsViewProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'coupons' | 'shopping' | 'bucket' | 'letters'>('coupons');
+  const [activeSubTab, setActiveSubTab] = useState<'photos' | 'coupons' | 'shopping' | 'bucket' | 'letters'>('photos');
 
   // Form states
   const [newShoppingItem, setNewShoppingItem] = useState('');
@@ -88,15 +97,28 @@ export default function ListsView({
       {/* Header */}
       <div>
         <h2 className="text-base font-black text-gray-800">Gemeinsames</h2>
-        <p className="text-xs text-gray-400 font-medium">Gutscheine, Einkäufe, Wünsche & Briefe</p>
+        <p className="text-xs text-gray-400 font-medium">Fotos, Gutscheine, Einkäufe, Wünsche & Briefe</p>
       </div>
 
-      {/* Pill Switcher (4 Compact Subtabs) */}
-      <div className="flex bg-white/90 p-1 rounded-2xl shadow-xs border border-gray-100 gap-1 w-full">
+      {/* Pill Switcher (5 Subtabs, clean and scrollable) */}
+      <div className="flex bg-white/90 p-1 rounded-2xl shadow-xs border border-gray-100 gap-1 w-full overflow-x-auto no-scrollbar">
+        <button
+          onClick={() => setActiveSubTab('photos')}
+          type="button"
+          className={`flex-1 py-1.5 px-2 text-[10px] font-black rounded-xl transition-all flex items-center justify-center gap-1 shrink-0 ${
+            activeSubTab === 'photos'
+              ? 'bg-[var(--color-primary)] text-white shadow-xs'
+              : 'text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          <Camera size={12} className="shrink-0" />
+          <span className="truncate">Momente 📸</span>
+        </button>
+
         <button
           onClick={() => setActiveSubTab('coupons')}
           type="button"
-          className={`flex-1 py-1.5 text-[10px] font-black rounded-xl transition-all flex items-center justify-center gap-1 min-w-0 ${
+          className={`flex-1 py-1.5 px-2 text-[10px] font-black rounded-xl transition-all flex items-center justify-center gap-1 shrink-0 ${
             activeSubTab === 'coupons'
               ? 'bg-[var(--color-primary)] text-white shadow-xs'
               : 'text-gray-500 hover:text-gray-800'
@@ -109,7 +131,7 @@ export default function ListsView({
         <button
           onClick={() => setActiveSubTab('shopping')}
           type="button"
-          className={`flex-1 py-1.5 text-[10px] font-black rounded-xl transition-all flex items-center justify-center gap-1 min-w-0 ${
+          className={`flex-1 py-1.5 px-2 text-[10px] font-black rounded-xl transition-all flex items-center justify-center gap-1 shrink-0 ${
             activeSubTab === 'shopping'
               ? 'bg-[var(--color-primary)] text-white shadow-xs'
               : 'text-gray-500 hover:text-gray-800'
@@ -122,7 +144,7 @@ export default function ListsView({
         <button
           onClick={() => setActiveSubTab('bucket')}
           type="button"
-          className={`flex-1 py-1.5 text-[10px] font-black rounded-xl transition-all flex items-center justify-center gap-1 min-w-0 ${
+          className={`flex-1 py-1.5 px-2 text-[10px] font-black rounded-xl transition-all flex items-center justify-center gap-1 shrink-0 ${
             activeSubTab === 'bucket'
               ? 'bg-[var(--color-primary)] text-white shadow-xs'
               : 'text-gray-500 hover:text-gray-800'
@@ -135,7 +157,7 @@ export default function ListsView({
         <button
           onClick={() => setActiveSubTab('letters')}
           type="button"
-          className={`flex-1 py-1.5 text-[10px] font-black rounded-xl transition-all flex items-center justify-center gap-1 min-w-0 ${
+          className={`flex-1 py-1.5 px-2 text-[10px] font-black rounded-xl transition-all flex items-center justify-center gap-1 shrink-0 ${
             activeSubTab === 'letters'
               ? 'bg-[var(--color-primary)] text-white shadow-xs'
               : 'text-gray-500 hover:text-gray-800'
@@ -146,7 +168,19 @@ export default function ListsView({
         </button>
       </div>
 
-      {/* SUB-TAB 1: LOVE COUPONS */}
+      {/* SUB-TAB 1: PHOTO WALL & MOMENTS */}
+      {activeSubTab === 'photos' && (
+        <PhotoWall
+          photos={photos}
+          profile={profile}
+          role={role}
+          onAddPhoto={onAddPhoto}
+          onLikePhoto={onLikePhoto}
+          onDeletePhoto={onDeletePhoto}
+        />
+      )}
+
+      {/* SUB-TAB 2: LOVE COUPONS */}
       {activeSubTab === 'coupons' && (
         <LoveCoupons
           coupons={coupons}
@@ -158,7 +192,7 @@ export default function ListsView({
         />
       )}
 
-      {/* SUB-TAB 2: SHOPPING LIST */}
+      {/* SUB-TAB 3: SHOPPING LIST */}
       {activeSubTab === 'shopping' && (
         <div className="space-y-2.5 animate-in">
           {/* Add input */}
@@ -231,7 +265,7 @@ export default function ListsView({
         </div>
       )}
 
-      {/* SUB-TAB 3: BUCKET LIST */}
+      {/* SUB-TAB 4: BUCKET LIST */}
       {activeSubTab === 'bucket' && (
         <div className="space-y-2.5 animate-in">
           {/* Add Bucket Goal */}
@@ -300,7 +334,7 @@ export default function ListsView({
         </div>
       )}
 
-      {/* SUB-TAB 4: LETTERS & NOTIZEN */}
+      {/* SUB-TAB 5: LETTERS & NOTIZEN */}
       {activeSubTab === 'letters' && (
         <div className="space-y-4 animate-in">
           {/* Zeitschloss-Briefe */}

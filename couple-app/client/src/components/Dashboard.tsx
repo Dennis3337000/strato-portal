@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Heart, Sparkles, Send, Utensils, Calendar, CheckSquare, Cake } from 'lucide-react';
-import type { ProfileData, MoodData, CountdownItem, EventItem, MealItem, UserRole } from '../types';
+import type { ProfileData, MoodData, CountdownItem, EventItem, MealItem, UserRole, PhotoItem } from '../types';
 
 const EMOJI_OPTIONS = ['🥰', '😊', '😴', '🥳', '😭', '🥺', '☕', '🍕', '🤒'];
 
@@ -12,6 +12,7 @@ interface DashboardProps {
   countdown: CountdownItem;
   events: EventItem[];
   meals: MealItem[];
+  photos?: PhotoItem[];
   onUpdateMood: (emoji: string, text: string) => void;
   onSendHug: () => void;
   onNavigateTab: (tab: string) => void;
@@ -46,10 +47,22 @@ export default function Dashboard({
   countdown,
   events,
   meals,
+  photos = [],
   onUpdateMood,
   onSendHug,
   onNavigateTab
 }: DashboardProps) {
+  const [currentPhotoIdx, setCurrentPhotoIdx] = useState(0);
+
+  // Auto-slideshow timer for Dashboard photo card
+  useEffect(() => {
+    if (photos.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentPhotoIdx(prev => (prev + 1) % photos.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [photos.length]);
+
   const currentPartnerName = role === 'Partner A' ? (profile.partner_a_name || 'Partner A') : (profile.partner_b_name || 'Partner B');
   const partnerName = role === 'Partner A' ? (profile.partner_b_name || 'Partner B') : (profile.partner_a_name || 'Partner A');
 
@@ -199,6 +212,45 @@ export default function Dashboard({
           </span>
         </div>
       </div>
+
+      {/* Photo Wall Auto-Slideshow Banner */}
+      {photos && photos.length > 0 && (
+        <div
+          onClick={() => onNavigateTab('lists')}
+          className="cursor-pointer glass-panel p-3 rounded-2xl shadow-xs border border-pink-200 hover:border-pink-300 transition-all flex items-center gap-3 active:scale-98 group"
+        >
+          <div className="w-14 h-14 rounded-xl overflow-hidden bg-gray-100 shrink-0 shadow-xs border border-pink-100 relative">
+            <img
+              src={photos[currentPhotoIdx % photos.length]?.image_data}
+              alt="Schnappschuss"
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-black uppercase text-pink-600 tracking-wide">
+                Unsere Momente 📸
+              </span>
+              <span className="bg-pink-100 text-pink-700 text-[8px] font-black px-1.5 rounded-full">
+                {photos.length} Fotos
+              </span>
+            </div>
+            <h4 className="font-black text-xs text-gray-800 truncate">
+              {photos[currentPhotoIdx % photos.length]?.title || 'Unser Schnappschuss 💕'}
+            </h4>
+            <p className="text-[10px] text-gray-400 truncate">
+              Tippen, um die Fotowand zu öffnen →
+            </p>
+          </div>
+
+          <div className="shrink-0 pr-1">
+            <span className="text-gray-400 group-hover:text-pink-500 text-sm font-bold">
+              →
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Mood Sharing Widget */}
       <div className="glass-panel p-3.5 rounded-2xl shadow-xs">

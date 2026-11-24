@@ -24,7 +24,8 @@ from main import (
     CouponItem, get_coupons, add_coupon, redeem_coupon,
     MostLikelyVote, get_most_likely_votes, vote_most_likely,
     DateIdeaItem, get_date_ideas, add_date_idea,
-    LetterItem, get_letters, add_letter, open_letter
+    LetterItem, get_letters, add_letter, open_letter,
+    PhotoCreate, get_photos, add_photo, like_photo, delete_photo
 )
 
 init_db()
@@ -198,6 +199,17 @@ def test_new_features():
     opened = next(l for l in letters if l["id"] == l_id)
     assert opened["is_opened"] is True
     print("  -> Letters OK")
+
+    print("[TEST] Photos...")
+    p_res = add_photo(PhotoCreate(title="Urlaub", image_data="data:image/png;base64,sample", author="Partner A"))
+    p_id = p_res["id"]
+    like_photo(p_id)
+    photos = get_photos()
+    assert any(p["id"] == p_id for p in photos)
+    delete_photo(p_id)
+    photos_after = get_photos()
+    assert not any(p["id"] == p_id for p in photos_after)
+    print("  -> Photos OK")
 
 if __name__ == "__main__":
     try:

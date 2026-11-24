@@ -113,3 +113,12 @@ export interface LetterItem {
   is_opened: boolean;
   created_at: string;
 }
+
+export interface PhotoItem {
+  id: number;
+  title: string;
+  image_data: string;
+  author: string;
+  likes: number;
+  created_at: string;
+}

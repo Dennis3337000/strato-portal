@@ -13,7 +13,8 @@ import type {
   QuestionWithAnswers,
   CouponItem,
   DateIdeaItem,
-  LetterItem
+  LetterItem,
+  PhotoItem
 } from './types';
 import { api } from './api';
 
@@ -65,6 +66,7 @@ export default function App() {
   const [mostLikelyVotes, setMostLikelyVotes] = useState<Record<string, Record<string, { vote: string; created_at: string }>>>({});
   const [dateIdeas, setDateIdeas] = useState<DateIdeaItem[]>([]);
   const [letters, setLetters] = useState<LetterItem[]>([]);
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
 
   // Load all data from API on start
   useEffect(() => {
@@ -83,7 +85,8 @@ export default function App() {
           cData,
           mlData,
           diData,
-          letData
+          letData,
+          phData
         ] = await Promise.all([
           api.getProfile(),
           api.getMoods(),
@@ -97,7 +100,8 @@ export default function App() {
           api.getCoupons(),
           api.getMostLikelyVotes(),
           api.getDateIdeas(),
-          api.getLetters()
+          api.getLetters(),
+          api.getPhotos()
         ]);
 
         if (profData) {
@@ -120,6 +124,7 @@ export default function App() {
         if (mlData) setMostLikelyVotes(mlData);
         if (diData) setDateIdeas(diData);
         if (letData) setLetters(letData);
+        if (phData) setPhotos(phData);
       } catch (e) {
         console.error('Fehler beim Laden der Couple-Daten:', e);
       }
@@ -345,6 +350,24 @@ export default function App() {
     showToast('Geheimer Liebesbrief versiegelt 🔒');
   };
 
+  // Photo actions
+  const handleAddPhoto = async (title: string, imageData: string, author: string) => {
+    const created = await api.addPhoto({ title, image_data: imageData, author });
+    setPhotos(prev => [created, ...prev]);
+    showToast('Foto auf Fotowand gepinnt! 📸💕');
+  };
+
+  const handleLikePhoto = async (id: number) => {
+    const newLikes = await api.likePhoto(id);
+    setPhotos(prev => prev.map(p => p.id === id ? { ...p, likes: newLikes } : p));
+  };
+
+  const handleDeletePhoto = async (id: number) => {
+    await api.deletePhoto(id);
+    setPhotos(prev => prev.filter(p => p.id !== id));
+    showToast('Foto entfernt');
+  };
+
   const handleResetData = () => {
     localStorage.clear();
     window.location.reload();
@@ -385,6 +408,7 @@ export default function App() {
             countdown={countdown}
             events={events}
             meals={meals}
+            photos={photos}
             onUpdateMood={handleUpdateMood}
             onSendHug={handleSendHug}
             onNavigateTab={setActiveTab}
@@ -431,6 +455,7 @@ export default function App() {
             notes={notes}
             coupons={coupons}
             letters={letters}
+            photos={photos}
             profile={profile}
             role={role}
             onAddShopping={handleAddShopping}
@@ -446,6 +471,9 @@ export default function App() {
             onDeleteCoupon={handleDeleteCoupon}
             onOpenLetter={handleOpenLetter}
             onAddLetter={handleAddLetter}
+            onAddPhoto={handleAddPhoto}
+            onLikePhoto={handleLikePhoto}
+            onDeletePhoto={handleDeletePhoto}
           />
         )}
       </main>
