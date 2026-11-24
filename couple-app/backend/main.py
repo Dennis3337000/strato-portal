@@ -169,41 +169,86 @@ def init_db():
         )
     ''')
 
-    # Seed Default Coupons falls leer
-    c.execute("SELECT COUNT(*) FROM coupons")
-    if c.fetchone()[0] == 0:
-        default_coupons = [
-            ("1x Frühstück ans Bett ☕🥐", "🥐", "Partner A", "Partner B"),
-            ("1x 20-Minuten-Rückenmassage 💆", "💆", "Partner A", "Partner B"),
-            ("1x Ich koche heute dein Lieblingsessen 🍝", "🍝", "Partner A", "Partner B"),
-            ("1x Du bestimmst den Film heute Abend 🎬", "🎬", "Partner A", "Partner B"),
-            ("1x Streit-Joker & Sofort-Versöhnung 😇", "😇", "Partner A", "Partner B"),
-            ("1x Gemütlicher Fußmassage-Abend 🦶", "🦶", "Partner A", "Partner B"),
-            ("1x Spontaner Eisbecher geht auf mich 🍦", "🍦", "Partner A", "Partner B"),
-            ("1x Ein ganzer Tag ohne Widerworte 👑", "👑", "Partner A", "Partner B")
-        ]
-        for title, icon, fp, tp in default_coupons:
+    # Seed Default Coupons falls noch nicht vorhanden
+    default_coupons = [
+        ("1x Frühstück ans Bett ☕🥐", "🥐", "Partner A", "Partner B"),
+        ("1x 20-Minuten-Rückenmassage 💆", "💆", "Partner A", "Partner B"),
+        ("1x Ich koche heute dein Lieblingsessen 🍝", "🍝", "Partner A", "Partner B"),
+        ("1x Du bestimmst den Film heute Abend 🎬", "🎬", "Partner A", "Partner B"),
+        ("1x Streit-Joker & Sofort-Versöhnung 😇", "😇", "Partner A", "Partner B"),
+        ("1x Gemütlicher Fußmassage-Abend 🦶", "🦶", "Partner A", "Partner B"),
+        ("1x Spontaner Eisbecher geht auf mich 🍦", "🍦", "Partner A", "Partner B"),
+        ("1x Ein ganzer Tag lang Chef sein 👑", "👑", "Partner A", "Partner B"),
+        ("1x Ausschlafen ohne Wecker 🛌", "🛌", "Partner A", "Partner B"),
+        ("1x Ich bringe dir Kaffee/Tee an den Schreibtisch ☕", "☕", "Partner A", "Partner B"),
+        ("1x Chauffeur-Dienst: Ich fahre heute überall hin 🚗", "🚗", "Partner A", "Partner B"),
+        ("1x Riesen-Popcorn im Kino geht auf meinen Nacken 🍿", "🍿", "Partner A", "Partner B"),
+        ("1x Ich übernehme das Aufräumen & Putzen 🧹", "🧹", "Partner A", "Partner B"),
+        ("1x Mülldienst-Befreiung für eine ganze Woche 🗑️", "🗑️", "Partner A", "Partner B"),
+        ("1x Ich räume heute die Spülmaschine aus 🍽️", "🍽️", "Partner A", "Partner B"),
+        ("1x Beruhigende Kopfmassage zum Einschlafen 💆‍♀️", "💆‍♀️", "Partner A", "Partner B"),
+        ("1x Pizza-Bestellung nach Wahl geht auf mich 🍕", "🍕", "Partner A", "Partner B"),
+        ("1x Ich erledige den Wocheneinkauf ganz alleine 🛒", "🛒", "Partner A", "Partner B"),
+        ("1x Deine Lieblingsschokolade als Überraschung 🍫", "🍫", "Partner A", "Partner B"),
+        ("1x 100 Küsse am Stück 💋", "💋", "Partner A", "Partner B"),
+        ("1x Fauler Nachmittag auf der Couch ohne schlechtes Gewissen 🛋️", "🛋️", "Partner A", "Partner B"),
+        ("1x Wir spielen ein Spiel deiner Wahl 🎲", "🎲", "Partner A", "Partner B"),
+        ("1x Ich mixe dir deinen Lieblingsdrink 🍷", "🍷", "Partner A", "Partner B"),
+        ("1x Begleitung zum Shoppen mit ehrlicher Beratung 👗", "👗", "Partner A", "Partner B"),
+        ("1x Sonntagsbrunch geht auf meine Rechnung 🥐", "🥐", "Partner A", "Partner B")
+    ]
+    for title, icon, fp, tp in default_coupons:
+        c.execute("SELECT id FROM coupons WHERE title = ?", (title,))
+        if not c.fetchone():
             c.execute("INSERT INTO coupons (title, icon, from_partner, to_partner, is_redeemed) VALUES (?, ?, ?, ?, 0)",
                       (title, icon, fp, tp))
 
-    # Seed Default Date Ideas fürs Roulette falls leer
-    c.execute("SELECT COUNT(*) FROM date_ideas")
-    if c.fetchone()[0] == 0:
-        default_ideas = [
-            ("Deckenburg im Wohnzimmer bauen & Film schauen 🏰", "Zuhause"),
-            ("Selbstgemachte Steinofen-Pizza belegen 🍕", "Zuhause"),
-            ("Romantischer Candlelight-Wellnessabend mit Masken 🧖", "Zuhause"),
-            ("Cocktails oder Wein auf dem Balkon mixen 🍷", "Zuhause"),
-            ("Gegenseitig ein 3-Gänge-Menü kochen 🍳", "Zuhause"),
-            ("Nachtspaziergang mit Eis in der Hand 🍦", "Draußen"),
-            ("Kinoabend mit Riesen-Popcorn 🍿", "Draußen"),
-            ("Gemeinsames Bowling- oder Minigolf-Duell 🎳", "Draußen"),
-            ("Spontanes Sonnenuntergangs-Picknick 🧺", "Draußen"),
-            ("Besuch in einem neuen Restaurant / Street Food 🍜", "Draußen"),
-            ("Spontaner Ausflug zum nächsten See / Aussichtspunkt 🚗", "Abenteuer"),
-            ("Sonntags-Schlemmerbrunch in einem gemütlichen Café 🥐", "Draußen")
-        ]
-        for title, cat in default_ideas:
+    # Seed Default Date Ideas fürs Roulette falls noch nicht vorhanden
+    default_ideas = [
+        ("Deckenburg im Wohnzimmer bauen & Film schauen 🏰", "Zuhause"),
+        ("Selbstgemachte Steinofen-Pizza belegen 🍕", "Zuhause"),
+        ("Romantischer Candlelight-Wellnessabend mit Masken 🧖", "Zuhause"),
+        ("Cocktails oder Wein auf dem Balkon mixen 🍷", "Zuhause"),
+        ("Gegenseitig ein 3-Gänge-Menü kochen 🍳", "Zuhause"),
+        ("Nachtspaziergang mit Eis in der Hand 🍦", "Draußen"),
+        ("Kinoabend mit Riesen-Popcorn 🍿", "Draußen"),
+        ("Gemeinsames Bowling- oder Minigolf-Duell 🎳", "Draußen"),
+        ("Spontanes Sonnenuntergangs-Picknick 🧺", "Draußen"),
+        ("Besuch in einem neuen Restaurant / Street Food 🍜", "Draußen"),
+        ("Spontaner Ausflug zum nächsten See / Aussichtspunkt 🚗", "Abenteuer"),
+        ("Sonntags-Schlemmerbrunch in einem gemütlichen Café 🥐", "Draußen"),
+        ("Gemeinsamer Spieleabend (Brettspiele oder Konsole) 🎲", "Zuhause"),
+        ("Sternschnuppen schauen mit Decke im Park 🌠", "Draußen"),
+        ("Frische Waffeln oder Crêpes backen mit vielen Toppings 🧇", "Zuhause"),
+        ("Escape Room Abenteuer zu zweit 🕵️", "Abenteuer"),
+        ("Thermalbad- oder Sauna-Tag 🧖", "Draußen"),
+        ("Tretboot oder Kanu fahren auf dem See 🛶", "Abenteuer"),
+        ("Flohmarkt oder Vintage-Laden erkunden 🛍️", "Draußen"),
+        ("Burger-Contest: Wer baut den geileren Gourmet-Burger? 🍔", "Zuhause"),
+        ("Einwegkamera-Spaziergang: Fotos machen und entwickeln 📷", "Draußen"),
+        ("Sushi-Platte zu Hause selbst rollen 🍣", "Zuhause"),
+        ("Karaoke-Abend im Wohnzimmer zu Lieblingsliedern 🎤", "Zuhause"),
+        ("Tierpark- oder Zoo-Besuch 🦁", "Draußen"),
+        ("Museums- oder Kunstausstellungs-Date 🏛️", "Draußen"),
+        ("Sonnenaufgang anschauen mit heißem Kakao 🌅", "Abenteuer"),
+        ("Lagerfeuer oder Grillen im Garten / Park 🔥", "Draußen"),
+        ("Fondue- oder Raclette-Schlemmerabend 🧀", "Zuhause"),
+        ("Kletterwald oder Bouldern ausprobieren 🧗", "Abenteuer"),
+        ("Zusammen ein 1000-Teile-Puzzle anfangen 🧩", "Zuhause"),
+        ("Tacos & Margarita Night 🌮", "Zuhause"),
+        ("Fahrradtour mit Zwischenstopp im Biergarten 🚲", "Draußen"),
+        ("Frisches Popcorn & Serienmarathon unter der Bettdecke 📺", "Zuhause"),
+        ("Planetarium-Besuch unter dem Sternenhimmel 🌌", "Draußen"),
+        ("Lasertag oder Trampolinpark Action 🎯", "Abenteuer"),
+        ("Spontaner Nacht-Drive-In zum Burger King / McDonald's 🍟", "Abenteuer"),
+        ("Gegenseitige Ganzkörpermassage mit Massage-Öl 🕯️", "Zuhause"),
+        ("Zusammen neue Tanzschritte oder Kochen lernen 💃", "Zuhause"),
+        ("Spaziergang durch den Botanischen Garten 🌺", "Draußen"),
+        ("Zusammen alte Kinderfotos und Erinnerungen anschauen 📸", "Zuhause")
+    ]
+    for title, cat in default_ideas:
+        c.execute("SELECT id FROM date_ideas WHERE title = ?", (title,))
+        if not c.fetchone():
             c.execute("INSERT INTO date_ideas (title, category, is_custom) VALUES (?, ?, 0)", (title, cat))
 
     # Spalten-Migrationen falls Tabellen bereits ohne neue Spalten existierten
