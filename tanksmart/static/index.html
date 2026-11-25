@@ -381,11 +381,11 @@
     const btnOpenSettings = document.getElementById('btnOpenSettings');
     const btnSaveKey = document.getElementById('btnSaveKey');
 
-    // Init Map
+    // Init Map (100% freie OpenStreetMap Tiles ohne API-Key Wasserzeichen)
     function initMap() {
       map = L.map('map').setView([currentLat, currentLng], 13);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap &copy; CARTO',
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
         maxZoom: 19
       }).addTo(map);
 
@@ -511,6 +511,13 @@
       }
 
       stationsList.innerHTML = '';
+
+      if (data.is_demo_key) {
+        const demoNotice = document.createElement('div');
+        demoNotice.style = "background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 8px 12px; font-size: 11px; color: #38bdf8; margin-bottom: 8px;";
+        demoNotice.innerHTML = "💡 <strong>Tipp:</strong> Trage oben bei ⚙️ deinen kostenlosen Tankerkönig-Key ein für offizielle MTS-K Cent-Preise. Aktuell: Realistische Markt-Simulation.";
+        stationsList.appendChild(demoNotice);
+      }
 
       stations.forEach((s, idx) => {
         const isBest = idx === 0;
