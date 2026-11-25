@@ -12,6 +12,7 @@
     --downloader-gradient: linear-gradient(135deg, #ef4444 0%, #ec4899 100%);
     --drop-gradient: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
     --tank-gradient: linear-gradient(135deg, #0ea5e9 0%, #22c55e 100%);
+    --speed-gradient: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
 }
 
 * {
@@ -116,6 +117,10 @@ header p {
 
 .tank-card::before {
     background: var(--tank-gradient);
+}
+
+.speed-card::before {
+    background: var(--speed-gradient);
 }
 
 .card:hover {

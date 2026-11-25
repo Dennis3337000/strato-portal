@@ -79,6 +79,16 @@ services:
       - strato-net
     restart: unless-stopped
 
+  # ==========================================
+  # 7. SPEEDTEST (Privater Highspeed NetPulse)
+  # ==========================================
+  speedtest:
+    build:
+      context: ./speedtest
+    networks:
+      - strato-net
+    restart: unless-stopped
+
 volumes:
   couple-app-data:
   crypto-analyzer-data:

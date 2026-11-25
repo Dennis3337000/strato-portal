@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>NetPulse — Privater Highspeed Speedtest</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&family=JetBrains+Mono:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+    body {
+      background: #090d16;
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.18), transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(14, 165, 233, 0.18), transparent 40%);
+      background-attachment: fixed;
+    }
+    .container { width: 100%; max-width: 540px; text-align: center; }
+    
+    .header { margin-bottom: 1.75rem; }
+    .header-badge {
+      display: inline-flex; align-items: center; gap: 6px; padding: 4px 14px;
+      background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 9999px; color: #818cf8; font-size: 0.75rem; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem;
+    }
+    .header h1 {
+      font-size: 2.25rem; font-weight: 900; letter-spacing: -0.03em;
+      background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0.5rem;
+    }
+    .header p { font-size: 0.9rem; color: #94a3b8; }
+
+    .card {
+      background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 28px; padding: 2rem 1.5rem; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      position: relative; overflow: hidden;
+    }
+
+    /* Gauge / Speedometer */
+    .gauge-wrapper {
+      position: relative; width: 260px; height: 160px; margin: 0 auto 1.5rem;
+      display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+    }
+    canvas {
+      position: absolute; top: 0; left: 0; width: 260px; height: 160px;
+    }
+    .speed-display {
+      position: relative; z-index: 10; margin-bottom: 10px;
+    }
+    .speed-val {
+      font-family: 'JetBrains Mono', monospace; font-size: 3.25rem; font-weight: 800;
+      line-height: 1; color: #ffffff; letter-spacing: -0.04em;
+    }
+    .speed-unit {
+      font-size: 0.85rem; font-weight: 800; color: #38bdf8; text-transform: uppercase;
+      letter-spacing: 0.08em; margin-top: 4px;
+    }
+    .phase-badge {
+      font-size: 0.8rem; font-weight: 800; color: #94a3b8;
+      background: rgba(255, 255, 255, 0.06); padding: 4px 12px; border-radius: 9999px;
+      display: inline-block; margin-top: 6px;
+    }
+
+    /* Results Grid */
+    .results-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 1.75rem;
+    }
+    .res-box {
+      background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px; padding: 0.85rem 0.5rem; text-align: center;
+    }
+    .res-box.active {
+      border-color: #38bdf8; background: rgba(56, 189, 248, 0.1);
+    }
+    .res-label {
+      font-size: 0.7rem; font-weight: 800; text-transform: uppercase;
+      color: #94a3b8; margin-bottom: 4px;
+    }
+    .res-num {
+      font-family: 'JetBrains Mono', monospace; font-size: 1.15rem; font-weight: 800;
+      color: #ffffff; line-height: 1.1;
+    }
+    .res-sub { font-size: 0.65rem; color: #64748b; margin-top: 2px; }
+
+    /* Action Button */
+    .btn-start {
+      width: 100%; max-width: 280px; margin: 0 auto;
+      background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
+      color: #ffffff; border: none; padding: 1.1rem 2rem; border-radius: 9999px;
+      font-size: 1.05rem; font-weight: 900; letter-spacing: 0.02em; cursor: pointer;
+      box-shadow: 0 10px 25px rgba(99, 102, 241, 0.35); transition: all 0.2s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn-start:hover:not(:disabled) {
+      transform: translateY(-2px); box-shadow: 0 15px 30px rgba(99, 102, 241, 0.5);
+    }
+    .btn-start:active:not(:disabled) { transform: scale(0.98); }
+    .btn-start:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .rating-banner {
+      display: none; margin-top: 1.5rem; padding: 0.75rem 1rem;
+      background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 14px; font-size: 0.85rem; font-weight: 800; color: #34d399;
+    }
+
+    .back-home { margin-top: 2rem; text-align: center; }
+    .back-home a { color: #94a3b8; text-decoration: none; font-size: 0.85rem; font-weight: 700; transition: color 0.2s; }
+    .back-home a:hover { color: #ffffff; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="header">
+      <div class="header-badge">
+        <span>⚡ 100% Werbefrei • Echter Direkttest</span>
+      </div>
+      <h1>NetPulse</h1>
+      <p>Highspeed-Geschwindigkeitstest direkt zu deinem Strato-Server</p>
+    </div>
+
+    <div class="card">
+      <!-- Speedometer -->
+      <div class="gauge-wrapper">
+        <canvas id="gaugeCanvas" width="520" height="320"></canvas>
+        <div class="speed-display">
+          <div id="speedVal" class="speed-val">0.0</div>
+          <div id="speedUnit" class="speed-unit">Mbps</div>
+        </div>
+      </div>
+
+      <div id="phaseBadge" class="phase-badge">Bereit zum Messen</div>
+
+      <!-- Results Grid -->
+      <div class="results-grid" style="margin-top: 1.5rem;">
+        <div id="boxPing" class="res-box">
+          <div class="res-label">⚡ Ping</div>
+          <div id="valPing" class="res-num">--</div>
+          <div class="res-sub">ms</div>
+        </div>
+        <div id="boxJitter" class="res-box">
+          <div class="res-label">📶 Jitter</div>
+          <div id="valJitter" class="res-num">--</div>
+          <div class="res-sub">ms</div>
+        </div>
+        <div id="boxDownload" class="res-box">
+          <div class="res-label">⬇️ Down</div>
+          <div id="valDownload" class="res-num">--</div>
+          <div class="res-sub">Mbps</div>
+        </div>
+        <div id="boxUpload" class="res-box">
+          <div class="res-label">⬆️ Up</div>
+          <div id="valUpload" class="res-num">--</div>
+          <div class="res-sub">Mbps</div>
+        </div>
+      </div>
+
+      <button id="btnStart" class="btn-start" type="button" onclick="startSpeedtest()">
+        <span>🚀 Test starten</span>
+      </button>
+
+      <div id="ratingBanner" class="rating-banner"></div>
+    </div>
+
+    <div class="back-home">
+      <a href="/">← Zurück zum Strato Portal</a>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gaugeCanvas');
+    const ctx = canvas.getContext('2d');
+    const speedVal = document.getElementById('speedVal');
+    const phaseBadge = document.getElementById('phaseBadge');
+    const btnStart = document.getElementById('btnStart');
+    const ratingBanner = document.getElementById('ratingBanner');
+
+    const valPing = document.getElementById('valPing');
+    const valJitter = document.getElementById('valJitter');
+    const valDownload = document.getElementById('valDownload');
+    const valUpload = document.getElementById('valUpload');
+
+    const boxPing = document.getElementById('boxPing');
+    const boxJitter = document.getElementById('boxJitter');
+    const boxDownload = document.getElementById('boxDownload');
+    const boxUpload = document.getElementById('boxUpload');
+
+    let currentGaugeSpeed = 0;
+    let targetGaugeSpeed = 0;
+
+    // Draw Gauge Arc
+    function drawGauge(speed) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const cx = canvas.width / 2;
+      const cy = canvas.height - 20;
+      const radius = 200;
+
+      // Background Arc
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, Math.PI, 2 * Math.PI, false);
+      ctx.lineWidth = 24;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+      ctx.lineCap = "round";
+      ctx.stroke();
+
+      // Progress Arc (Scaled 0 - 300 Mbps)
+      const maxDisplaySpeed = 250;
+      const fraction = Math.min(1.0, Math.max(0.0, speed / maxDisplaySpeed));
+      const endAngle = Math.PI + (fraction * Math.PI);
+
+      if (fraction > 0) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, Math.PI, endAngle, false);
+        ctx.lineWidth = 24;
+        const grad = ctx.createLinearGradient(0, cy, canvas.width, cy);
+        grad.addColorStop(0, "#6366f1");
+        grad.addColorStop(0.5, "#38bdf8");
+        grad.addColorStop(1, "#34d399");
+        ctx.strokeStyle = grad;
+        ctx.lineCap = "round";
+        ctx.stroke();
+      }
+    }
+
+    function animateGauge() {
+      currentGaugeSpeed += (targetGaugeSpeed - currentGaugeSpeed) * 0.15;
+      drawGauge(currentGaugeSpeed);
+      requestAnimationFrame(animateGauge);
+    }
+    requestAnimationFrame(animateGauge);
+
+    function getApiBase() {
+      return window.location.pathname.endsWith('/') 
+        ? window.location.pathname + 'api' 
+        : window.location.pathname + '/api';
+    }
+
+    async function measurePingAndJitter() {
+      phaseBadge.textContent = "Messung: Ping & Jitter...";
+      boxPing.classList.add('active');
+      boxJitter.classList.add('active');
+
+      const pings = [];
+      const api = getApiBase();
+
+      for (let i = 0; i < 8; i++) {
+        const start = performance.now();
+        await fetch(`${api}/ping?t=${Date.now()}`, { cache: "no-store" });
+        const rtt = performance.now() - start;
+        pings.push(rtt);
+        valPing.textContent = Math.round(rtt);
+        await new Promise(r => setTimeout(r, 60));
+      }
+
+      pings.sort((a, b) => a - b);
+      const medianPing = pings[Math.floor(pings.length / 2)];
+      valPing.textContent = Math.round(medianPing);
+
+      // Jitter (mittlere Abweichung)
+      let sumDiff = 0;
+      for (let i = 1; i < pings.length; i++) {
+        sumDiff += Math.abs(pings[i] - pings[i - 1]);
+      }
+      const jitter = pings.length > 1 ? sumDiff / (pings.length - 1) : 0;
+      valJitter.textContent = Math.round(jitter);
+
+      boxPing.classList.remove('active');
+      boxJitter.classList.remove('active');
+    }
+
+    async function measureDownload() {
+      phaseBadge.textContent = "Messung: Download...";
+      boxDownload.classList.add('active');
+      targetGaugeSpeed = 0;
+
+      const api = getApiBase();
+      const chunks = [5 * 1024 * 1024, 10 * 1024 * 1024, 20 * 1024 * 1024];
+      let totalBytes = 0;
+      const startTime = performance.now();
+
+      for (const chunkSize of chunks) {
+        const reqStart = performance.now();
+        const res = await fetch(`${api}/download?bytes_count=${chunkSize}&t=${Date.now()}`, { cache: "no-store" });
+        const reader = res.body.getReader();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          totalBytes += value.length;
+
+          const elapsedSec = (performance.now() - startTime) / 1000;
+          if (elapsedSec > 0.2) {
+            const currentMbps = (totalBytes * 8) / (elapsedSec * 1000000);
+            targetGaugeSpeed = currentMbps;
+            speedVal.textContent = currentMbps.toFixed(1);
+          }
+        }
+      }
+
+      const totalSec = (performance.now() - startTime) / 1000;
+      const finalMbps = (totalBytes * 8) / (totalSec * 1000000);
+      valDownload.textContent = finalMbps.toFixed(1);
+      targetGaugeSpeed = 0;
+      boxDownload.classList.remove('active');
+      return finalMbps;
+    }
+
+    async function measureUpload() {
+      phaseBadge.textContent = "Messung: Upload...";
+      boxUpload.classList.add('active');
+      targetGaugeSpeed = 0;
+
+      const api = getApiBase();
+      // Erzeuge 8 MB Test-Payload
+      const payloadSize = 8 * 1024 * 1024;
+      const payload = new Uint8Array(payloadSize);
+
+      const startTime = performance.now();
+
+      await new Promise((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `${api}/upload?t=${Date.now()}`, true);
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const elapsedSec = (performance.now() - startTime) / 1000;
+            if (elapsedSec > 0.1) {
+              const currentMbps = (e.loaded * 8) / (elapsedSec * 1000000);
+              targetGaugeSpeed = currentMbps;
+              speedVal.textContent = currentMbps.toFixed(1);
+            }
+          }
+        };
+
+        xhr.onload = () => resolve();
+        xhr.onerror = () => resolve();
+        xhr.send(payload);
+      });
+
+      const totalSec = (performance.now() - startTime) / 1000;
+      const finalMbps = (payloadSize * 8) / (totalSec * 1000000);
+      valUpload.textContent = finalMbps.toFixed(1);
+      targetGaugeSpeed = 0;
+      boxUpload.classList.remove('active');
+      return finalMbps;
+    }
+
+    async function startSpeedtest() {
+      btnStart.disabled = true;
+      ratingBanner.style.display = "none";
+      ratingBanner.textContent = "";
+
+      valPing.textContent = "--";
+      valJitter.textContent = "--";
+      valDownload.textContent = "--";
+      valUpload.textContent = "--";
+      speedVal.textContent = "0.0";
+
+      try {
+        await measurePingAndJitter();
+        const down = await measureDownload();
+        const up = await measureUpload();
+
+        phaseBadge.textContent = "Test abgeschlossen! ✅";
+        speedVal.textContent = down.toFixed(1);
+
+        // Rating auswerten
+        let rating = "🚀 Exzellente Verbindung! Perfekt für 4K-Streaming, Gaming & Remote Work.";
+        if (down < 25) {
+          rating = "⚠️ Basis-Geschwindigkeit: Ausreichend für HD-Video und Surfen.";
+        } else if (down < 75) {
+          rating = "⚡ Sehr gute Geschwindigkeit: Problemloses Full-HD Streaming & Video-Calls.";
+        }
+        ratingBanner.textContent = rating;
+        ratingBanner.style.display = "block";
+
+      } catch (err) {
+        phaseBadge.textContent = "⚠️ Messfehler aufgetreten";
+      } finally {
+        btnStart.disabled = false;
+        btnStart.innerHTML = "<span>🔄 Erneut testen</span>";
+      }
+    }
+  </script>
+</body>
+</html>
