@@ -43,6 +43,9 @@ services:
     networks:
       - strato-net
     restart: unless-stopped
+    volumes:
+      - crypto-analyzer-data:/app/backend/data
 
 volumes:
   couple-app-data:
+  crypto-analyzer-data:

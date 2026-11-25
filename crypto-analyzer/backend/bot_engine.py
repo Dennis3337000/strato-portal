@@ -101,7 +101,17 @@ def load_positions() -> List[Dict[str, Any]]:
     with DATA_LOCK:
         try:
             with open(POSITIONS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                positions = json.load(f)
+
+            # Sanity-Bereinigung: Entferne veraltete historische Phantom-Trades
+            cleaned_positions = [
+                p for p in positions
+                if p.get("id") not in ["pos_1794395922071_SOL", "pos_btc_binance_live", "pos_link_binance_live"]
+            ]
+            if len(cleaned_positions) != len(positions):
+                _atomic_write_json(POSITIONS_FILE, cleaned_positions)
+                return cleaned_positions
+            return positions
         except Exception:
             return []
 
