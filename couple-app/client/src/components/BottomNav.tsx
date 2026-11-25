@@ -16,7 +16,7 @@ export default function BottomNav({ activeTab, onSelectTab, shoppingBadgeCount }
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 max-w-[1600px] 2xl:max-w-[1850px] mx-auto bg-white/95 backdrop-blur-md border-t border-pink-100 flex justify-around items-center h-16 z-40 px-3 sm:px-12 shadow-lg safe-bottom-nav">
+    <nav className="fixed bottom-0 left-0 right-0 w-full lg:max-w-5xl xl:max-w-6xl mx-auto bg-white/95 backdrop-blur-md border-t border-pink-100 flex justify-around items-center h-16 z-40 px-2 sm:px-6 shadow-lg safe-bottom-nav">
       {tabs.map(tab => {
         const Icon = tab.icon;
         const isActive = activeTab === tab.id;

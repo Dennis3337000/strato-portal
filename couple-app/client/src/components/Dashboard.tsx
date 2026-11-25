@@ -201,10 +201,10 @@ export default function Dashboard({
 
   return (
     <div className="space-y-3 pb-3 animate-in w-full max-w-full overflow-hidden">
-      {/* Responsive Grid: Smartphone 1 Spalte, Tablet 2 Spalten, Widescreen 12-Spalten-Layout (7 Links / 5 Rechts) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-4 lg:gap-6 items-start">
+      {/* Responsive Grid: Auf Mobilgeraeten IMMER 1 Spalte (volle Breite), erst ab echtem Desktop (lg: >= 1024px) 2 Spalten */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 lg:gap-6 items-start w-full">
         {/* Linke Spalte auf Desktop: Liebes-Counter & Großer Herz-Rahmen */}
-        <div className="space-y-4 md:col-span-1 xl:col-span-7">
+        <div className="space-y-3.5 lg:col-span-7 w-full">
           {/* Love Counter Hero Card */}
           <div className="glass-panel p-4 rounded-3xl relative overflow-hidden text-center shadow-xs">
         <div className="relative z-10">
@@ -425,7 +425,7 @@ export default function Dashboard({
     </div>
 
     {/* Rechte Spalte auf Desktop: Countdowns, Stimmungs-Radar & Aktionen */}
-    <div className="space-y-4 md:col-span-1 xl:col-span-5">
+    <div className="space-y-3.5 lg:col-span-5 w-full">
       {/* Birthday Banner if available */}
       {nextBirthdayInfo && (
         <div className="bg-gradient-to-r from-amber-400 via-rose-300 to-pink-400 text-white p-3 rounded-2xl shadow-sm flex items-center justify-between">
