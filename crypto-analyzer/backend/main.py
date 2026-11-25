@@ -1323,6 +1323,13 @@ def reset_bot_journal_api(request: Request) -> Dict[str, Any]:
     bot_engine.save_journal([])
     return {"success": True, "message": "Trade-Journal wurde erfolgreich zurueckgesetzt."}
 
+@app.post("/api/bot/positions/reset")
+def reset_bot_positions_api(request: Request) -> Dict[str, Any]:
+    """Loescht alle aktiven Positionen auf Wunsch des Benutzers sauber und sofort."""
+    verify_auth_header(request)
+    bot_engine.save_positions([])
+    return {"success": True, "message": "Alle aktiven Positionen wurden erfolgreich zurueckgesetzt."}
+
 @app.post("/api/bot/emergency-stop")
 def emergency_stop_api(request: Request) -> Dict[str, Any]:
     """Panik-Knopf: Liquidiert alle Positionen, bricht Orders ab und schaltet den Bot ab."""
