@@ -53,6 +53,8 @@ services:
   uptime-kuma:
     image: louislam/uptime-kuma:1
     restart: unless-stopped
+    ports:
+      - "3001:3001"
     networks:
       - strato-net
     volumes:
