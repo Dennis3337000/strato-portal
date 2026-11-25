@@ -416,6 +416,8 @@ export default function App() {
             onUpdateMood={handleUpdateMood}
             onSendHug={handleSendHug}
             onNavigateTab={setActiveTab}
+            onAddPhoto={handleAddPhoto}
+            onLikePhoto={handleLikePhoto}
           />
         )}
 

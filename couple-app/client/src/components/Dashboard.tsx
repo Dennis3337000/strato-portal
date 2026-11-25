@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Heart, Sparkles, Send, Utensils, Calendar, CheckSquare, Cake } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Heart, Sparkles, Send, Utensils, Calendar, CheckSquare, Cake, Camera, ChevronLeft, ChevronRight, Maximize2, X } from 'lucide-react';
 import type { ProfileData, MoodData, CountdownItem, EventItem, MealItem, UserRole, PhotoItem } from '../types';
 
 const EMOJI_OPTIONS = ['🥰', '😊', '😴', '🥳', '😭', '🥺', '☕', '🍕', '🤒'];
@@ -16,6 +16,8 @@ interface DashboardProps {
   onUpdateMood: (emoji: string, text: string) => void;
   onSendHug: () => void;
   onNavigateTab: (tab: string) => void;
+  onAddPhoto?: (title: string, imageData: string, author: string) => void;
+  onLikePhoto?: (id: number) => void;
 }
 
 function getDaysUntilBirthday(birthdayStr?: string): { days: number; formattedDate: string } | null {
@@ -50,18 +52,99 @@ export default function Dashboard({
   photos = [],
   onUpdateMood,
   onSendHug,
-  onNavigateTab
+  onNavigateTab,
+  onAddPhoto,
+  onLikePhoto
 }: DashboardProps) {
   const [currentPhotoIdx, setCurrentPhotoIdx] = useState(0);
+  const [selectedFullscreenPhoto, setSelectedFullscreenPhoto] = useState<PhotoItem | null>(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [photoCaption, setPhotoCaption] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
-  // Auto-slideshow timer for Dashboard photo card
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-slideshow timer for Dashboard photo card (rotates every 4.5s)
   useEffect(() => {
     if (photos.length <= 1) return;
     const interval = setInterval(() => {
       setCurrentPhotoIdx(prev => (prev + 1) % photos.length);
-    }, 4000);
+    }, 4500);
     return () => clearInterval(interval);
   }, [photos.length]);
+
+  const activePhoto = photos.length > 0 ? photos[currentPhotoIdx % photos.length] : null;
+
+  const nextPhoto = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (photos.length > 1) {
+      setCurrentPhotoIdx(prev => (prev + 1) % photos.length);
+    }
+  };
+
+  const prevPhoto = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (photos.length > 1) {
+      setCurrentPhotoIdx(prev => (prev - 1 + photos.length) % photos.length);
+    }
+  };
+
+  // Client-side image compression for fast mobile uploads
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        const maxDim = 800;
+
+        if (width > height && width > maxDim) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else if (height > maxDim) {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.72);
+          setPreviewImage(compressedDataUrl);
+          setShowUploadModal(true);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleConfirmUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!previewImage || isUploading || !onAddPhoto) return;
+    setIsUploading(true);
+    try {
+      await onAddPhoto(photoCaption.trim() || 'Schöner Moment 💕', previewImage, currentPartnerName);
+      setPreviewImage(null);
+      setPhotoCaption('');
+      setShowUploadModal(false);
+      setCurrentPhotoIdx(0);
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const currentPartnerName = role === 'Partner A' ? (profile.partner_a_name || 'Partner A') : (profile.partner_b_name || 'Partner B');
   const partnerName = role === 'Partner A' ? (profile.partner_b_name || 'Partner B') : (profile.partner_a_name || 'Partner A');
@@ -132,6 +215,207 @@ export default function Dashboard({
           <p className="text-[11px] text-gray-500 font-medium truncate">
             Jeder einzelne Tag mit dir ist besonders ✨
           </p>
+        </div>
+      </div>
+
+      {/* ======================================================== */}
+      {/* GROSSER PÄRCHEN-BILDERRAHMEN AUS HERZEN (HOMESCREEN SHOWCASE) */}
+      {/* ======================================================== */}
+      <div className="relative my-1 w-full select-none">
+        {/* Romantischer Herz-Rahmen Container */}
+        <div className="relative rounded-[32px] p-2.5 sm:p-3.5 bg-gradient-to-br from-pink-300 via-rose-150 to-pink-200 shadow-[0_12px_36px_rgba(244,63,94,0.22)] border-2 border-pink-300/80">
+          
+          {/* Obere Herz-Girlande & Header-Badge */}
+          <div className="flex items-center justify-between text-rose-500 font-black mb-1.5 px-2 select-none">
+            <div className="flex items-center gap-1 text-[11px] tracking-widest opacity-85">
+              <span>♥</span><span>♥</span><span>♥</span>
+              <span className="text-xs">💖</span>
+            </div>
+            
+            <div className="flex items-center gap-1.5 bg-white/90 backdrop-blur-xs px-3 py-0.5 rounded-full shadow-xs border border-pink-200">
+              <Heart size={12} className="text-pink-500 fill-current animate-pulse" />
+              <span className="text-[10px] uppercase tracking-wider font-black text-pink-700">
+                Unsere Momente
+              </span>
+              {photos.length > 0 && (
+                <span className="text-[9px] font-extrabold text-pink-500 bg-pink-50 px-1.5 py-0.2 rounded-full">
+                  {currentPhotoIdx % photos.length + 1}/{photos.length}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1 text-[11px] tracking-widest opacity-85">
+              <span className="text-xs">💕</span>
+              <span>♥</span><span>♥</span><span>♥</span>
+            </div>
+          </div>
+
+          {/* Verspielte Herz-Akzente an den 4 Ecken */}
+          <div className="absolute -top-2.5 -left-2 text-lg select-none drop-shadow-xs animate-bounce" style={{ animationDuration: '3s' }}>
+            💖
+          </div>
+          <div className="absolute -top-2.5 -right-2 text-lg select-none drop-shadow-xs animate-bounce" style={{ animationDuration: '2.6s' }}>
+            💕
+          </div>
+          <div className="absolute -bottom-2 -left-2 text-base select-none drop-shadow-xs">
+            🌸
+          </div>
+          <div className="absolute -bottom-2 -right-2 text-base select-none drop-shadow-xs animate-bounce" style={{ animationDuration: '3.4s' }}>
+            🥰
+          </div>
+
+          {/* Weißes Passepartout / Foto-Bett mit Herz-Ornamentik */}
+          <div className="bg-white p-2 sm:p-2.5 rounded-[24px] shadow-xs relative overflow-hidden border border-pink-100">
+            {activePhoto ? (
+              <div 
+                className="relative w-full aspect-4/3 sm:h-76 rounded-[18px] overflow-hidden bg-pink-50 group shadow-inner cursor-pointer"
+                onClick={() => setSelectedFullscreenPhoto(activePhoto)}
+              >
+                {/* Das Foto im Herz-Rahmen mit sanftem Zoom & Wechsel */}
+                <img
+                  key={activePhoto.id}
+                  src={activePhoto.image_data}
+                  alt={activePhoto.title || 'Unser Schnappschuss'}
+                  className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-700 select-none"
+                />
+
+                {/* Floating Quick Upload Button (Kamera) */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                  className="absolute top-2.5 right-2.5 bg-black/45 hover:bg-black/60 text-white backdrop-blur-md p-2 rounded-full shadow-md active:scale-90 transition-all z-10 flex items-center gap-1"
+                  title="Neues Foto hinzufügen"
+                >
+                  <Camera size={14} />
+                  <span className="text-[10px] font-extrabold pr-1 hidden sm:inline">Neues Foto</span>
+                </button>
+
+                {/* Navigation Pfeile (Links / Rechts) */}
+                {photos.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={prevPhoto}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/35 hover:bg-black/60 text-white backdrop-blur-md flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 z-10"
+                      title="Vorheriges Foto"
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={nextPhoto}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/35 hover:bg-black/60 text-white backdrop-blur-md flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 z-10"
+                      title="Nächstes Foto"
+                    >
+                      <ChevronRight size={18} />
+                    </button>
+                  </>
+                )}
+
+                {/* Untere Bildunterschrift mit Milchglas-Optik */}
+                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent pt-8 pb-2 px-3 rounded-b-[18px] text-white flex items-end justify-between gap-2 z-10">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-extrabold text-xs sm:text-sm text-white truncate drop-shadow-sm flex items-center gap-1">
+                      <span>{activePhoto.title || 'Unser Schnappschuss 💕'}</span>
+                    </h3>
+                    <p className="text-[10px] text-white/80 font-medium truncate">
+                      Von {activePhoto.author} • {activePhoto.created_at || 'Gemeinsamer Moment'}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Like Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onLikePhoto?.(activePhoto.id);
+                      }}
+                      className="bg-white/20 hover:bg-white/30 backdrop-blur-md px-2.5 py-1 rounded-full text-xs font-black flex items-center gap-1 transition-all active:scale-90 text-white shadow-xs"
+                      title="Gefällt mir"
+                    >
+                      <Heart size={13} className="text-rose-400 fill-current" />
+                      <span>{activePhoto.likes || 0}</span>
+                    </button>
+
+                    {/* Fullscreen Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedFullscreenPhoto(activePhoto);
+                      }}
+                      className="bg-white/20 hover:bg-white/30 backdrop-blur-md p-1.5 rounded-full text-white transition-all active:scale-90 shadow-xs"
+                      title="Großansicht"
+                    >
+                      <Maximize2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Empty State im Bilderrahmen */
+              <div 
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full aspect-4/3 sm:h-76 rounded-[18px] border-2 border-dashed border-pink-300 bg-pink-50/50 hover:bg-pink-50 transition-all flex flex-col items-center justify-center p-4 text-center cursor-pointer group"
+              >
+                <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-pink-400 to-rose-300 text-white flex items-center justify-center text-2xl shadow-md mb-2.5 group-hover:scale-110 transition-transform">
+                  📸
+                </div>
+                <h4 className="font-black text-sm text-gray-800 mb-0.5">
+                  Noch kein Foto im Bilderrahmen 💕
+                </h4>
+                <p className="text-xs text-gray-500 max-w-xs mb-3 font-medium">
+                  Hier erscheinen eure gemeinsamen Schnappschüsse direkt als Diashow mit Herz-Rahmen!
+                </p>
+                <button
+                  type="button"
+                  className="bg-gradient-to-r from-pink-500 to-rose-400 text-white font-black text-xs px-4 py-2 rounded-xl shadow-xs flex items-center gap-1.5 active:scale-95 transition-all"
+                >
+                  <Camera size={14} /> Erstes Pärchenfoto hochladen
+                </button>
+              </div>
+            )}
+
+            {/* Herz-Pagination / Indikatoren */}
+            {photos.length > 1 && (
+              <div className="flex items-center justify-center gap-1.5 pt-2">
+                {photos.slice(0, 10).map((p, idx) => {
+                  const isActive = idx === (currentPhotoIdx % photos.length);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setCurrentPhotoIdx(idx)}
+                      className={`transition-all duration-300 ${
+                        isActive 
+                          ? 'text-pink-500 text-xs scale-125' 
+                          : 'text-pink-200 hover:text-pink-300 text-[10px]'
+                      }`}
+                      title={`Zu Foto ${idx + 1}`}
+                    >
+                      ♥
+                    </button>
+                  );
+                })}
+                {photos.length > 10 && (
+                  <span className="text-[9px] text-pink-300 font-bold">
+                    +{photos.length - 10}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Untere Herz-Girlande (Rahmen-Abschluss) */}
+          <div className="flex items-center justify-center gap-1.5 text-[11px] text-rose-400 font-black mt-1.5 select-none tracking-widest opacity-80">
+            <span>♥</span><span>♥</span><span>♥</span><span>♥</span><span>♥</span>
+            <Heart size={11} className="text-pink-500 inline fill-current animate-pulse" />
+            <span>♥</span><span>♥</span><span>♥</span><span>♥</span><span>♥</span>
+          </div>
         </div>
       </div>
 
@@ -212,45 +496,6 @@ export default function Dashboard({
           </span>
         </div>
       </div>
-
-      {/* Photo Wall Auto-Slideshow Banner */}
-      {photos && photos.length > 0 && (
-        <div
-          onClick={() => onNavigateTab('lists')}
-          className="cursor-pointer glass-panel p-3 rounded-2xl shadow-xs border border-pink-200 hover:border-pink-300 transition-all flex items-center gap-3 active:scale-98 group"
-        >
-          <div className="w-14 h-14 rounded-xl overflow-hidden bg-gray-100 shrink-0 shadow-xs border border-pink-100 relative">
-            <img
-              src={photos[currentPhotoIdx % photos.length]?.image_data}
-              alt="Schnappschuss"
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            />
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-black uppercase text-pink-600 tracking-wide">
-                Unsere Momente 📸
-              </span>
-              <span className="bg-pink-100 text-pink-700 text-[8px] font-black px-1.5 rounded-full">
-                {photos.length} Fotos
-              </span>
-            </div>
-            <h4 className="font-black text-xs text-gray-800 truncate">
-              {photos[currentPhotoIdx % photos.length]?.title || 'Unser Schnappschuss 💕'}
-            </h4>
-            <p className="text-[10px] text-gray-400 truncate">
-              Tippen, um die Fotowand zu öffnen →
-            </p>
-          </div>
-
-          <div className="shrink-0 pr-1">
-            <span className="text-gray-400 group-hover:text-pink-500 text-sm font-bold">
-              →
-            </span>
-          </div>
-        </div>
-      )}
 
       {/* Mood Sharing Widget */}
       <div className="glass-panel p-3.5 rounded-2xl shadow-xs">
@@ -416,6 +661,125 @@ export default function Dashboard({
           <span className="text-[9px] text-gray-400 block truncate">Jetzt einlösen →</span>
         </div>
       </div>
+
+      {/* Hidden File Input for Mobile Camera / Gallery */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
+      {/* UPLOAD MODAL MIT VORSCHAU */}
+      {showUploadModal && previewImage && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-4 shadow-xl border-2 border-pink-150 flex flex-col items-center">
+            <div className="w-full flex items-center justify-between mb-2">
+              <h3 className="font-black text-sm text-gray-800 flex items-center gap-1.5">
+                <span>📸</span> Foto für den Herz-Rahmen
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowUploadModal(false)}
+                className="w-7 h-7 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="w-full aspect-4/3 rounded-2xl overflow-hidden bg-pink-50 mb-3 border border-pink-100 shadow-inner">
+              <img src={previewImage} alt="Vorschau" className="w-full h-full object-cover" />
+            </div>
+
+            <form onSubmit={handleConfirmUpload} className="w-full space-y-2.5">
+              <input
+                type="text"
+                value={photoCaption}
+                onChange={e => setPhotoCaption(e.target.value)}
+                placeholder="Bildunterschrift eingeben... 💕"
+                className="w-full px-3 py-2 text-xs rounded-xl border border-pink-200 focus:outline-none focus:ring-2 focus:ring-pink-300"
+                maxLength={60}
+              />
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowUploadModal(false)}
+                  className="flex-1 py-2 rounded-xl text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUploading}
+                  className="flex-1 py-2 rounded-xl text-xs font-black text-white bg-gradient-to-r from-pink-500 to-rose-400 shadow-xs hover:shadow-md active:scale-95 transition-all"
+                >
+                  {isUploading ? 'Speichern...' : '❤️ Einrahmen'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* FULLSCREEN LIGHTBOX MODAL */}
+      {selectedFullscreenPhoto && (
+        <div 
+          onClick={() => setSelectedFullscreenPhoto(null)}
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in"
+        >
+          <button
+            type="button"
+            onClick={() => setSelectedFullscreenPhoto(null)}
+            className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/20 text-white flex items-center justify-center hover:bg-white/30 backdrop-blur-md z-10"
+          >
+            <X size={20} />
+          </button>
+
+          <div 
+            onClick={e => e.stopPropagation()} 
+            className="w-full max-w-md max-h-[85vh] flex flex-col items-center"
+          >
+            <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-white/20 max-h-[68vh]">
+              <img
+                src={selectedFullscreenPhoto.image_data}
+                alt={selectedFullscreenPhoto.title}
+                className="w-full h-full object-contain"
+              />
+            </div>
+
+            <div className="text-center mt-3 text-white">
+              <h3 className="font-extrabold text-base text-white flex items-center justify-center gap-1.5">
+                <span>{selectedFullscreenPhoto.title || 'Gemeinsamer Moment 💕'}</span>
+              </h3>
+              <p className="text-xs text-white/70">
+                Von {selectedFullscreenPhoto.author} • {selectedFullscreenPhoto.created_at || 'Schnappschuss'}
+              </p>
+              <div className="flex items-center justify-center gap-2 mt-2.5">
+                <button
+                  type="button"
+                  onClick={() => onLikePhoto?.(selectedFullscreenPhoto.id)}
+                  className="bg-white/20 hover:bg-white/30 backdrop-blur-md px-3 py-1 rounded-full text-xs font-black flex items-center gap-1.5 text-white active:scale-95 transition-all"
+                >
+                  <Heart size={14} className="text-rose-400 fill-current" />
+                  <span>{selectedFullscreenPhoto.likes || 0} Gefällt mir</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedFullscreenPhoto(null);
+                    onNavigateTab('lists');
+                  }}
+                  className="bg-pink-500/80 hover:bg-pink-500 backdrop-blur-md px-3 py-1 rounded-full text-xs font-black text-white active:scale-95 transition-all"
+                >
+                  Zur Fotowand →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
