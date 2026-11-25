@@ -425,8 +425,9 @@ def get_btc_market_regime() -> Dict[str, Any]:
             status = "BEARISH_DUMP"
             reason = f"BTC im aktiven Abwaertstrend unter EMA20 (${btc_ema_20_1h:.0f}) & EMA50 (${btc_ema_50_1h:.0f}) mit fallendem Momentum"
         elif is_downtrend:
-            status = "WEAK_RANGE"
-            reason = "BTC konsolidiert unter Trendlinie - nur strenge A+ Reversals erlaubt"
+            allow_buys = False
+            status = "BEARISH_DOWNTREND"
+            reason = f"BTC unter 1h EMA20 (${btc_ema_20_1h:.0f}) & EMA50 (${btc_ema_50_1h:.0f}) - Altcoin-Kaeufe gesperrt (Gefahr fallender Messer)"
 
         regime_data = {
             "btc_price": btc_price,
@@ -596,15 +597,28 @@ def get_trading_analysis(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         sym = f"{sym}USDT"
         
     # Klines fuer Indikatorberechnung (15m fuer Momentum, 1h fuer Trend)
-    klines_15m = binance_get("/fapi/v1/klines", {"symbol": sym, "interval": "15m", "limit": 40})
-    klines_1h = binance_get("/fapi/v1/klines", {"symbol": sym, "interval": "1h", "limit": 40})
+    # Klines fuer Indikatorberechnung (15m fuer Momentum & Setup, 1h fuer Makro-Trend)
+    klines_15m = binance_get("/fapi/v1/klines", {"symbol": sym, "interval": "15m", "limit": 45})
+    klines_1h = binance_get("/fapi/v1/klines", {"symbol": sym, "interval": "1h", "limit": 50})
     
+    opens_15m = [float(k[1]) for k in klines_15m]
+    highs_15m = [float(k[2]) for k in klines_15m]
+    lows_15m = [float(k[3]) for k in klines_15m]
     closes_15m = [float(k[4]) for k in klines_15m]
+    volumes_15m = [float(k[5]) for k in klines_15m]
+    
     closes_1h = [float(k[4]) for k in klines_1h]
     current_price = closes_15m[-1]
     
+    # 1. Technische Indikatoren berechnen
     rsi_15m = calculate_rsi(closes_15m, period=14)
     rsi_1h = calculate_rsi(closes_1h, period=14)
+    atr_15m = calculate_atr(highs_15m, lows_15m, closes_15m, period=14)
+    macd_15m = calculate_macd(closes_15m)
+    vol_analysis = analyze_volume_profile(volumes_15m, opens_15m, closes_15m)
+    candle_pattern = detect_candlestick_pattern(opens_15m, highs_15m, lows_15m, closes_15m)
+    trend_1h = get_multi_timeframe_trend_data(closes_1h)
+    rsi_div = detect_rsi_divergence(lows_15m, closes_15m, period=14)
     
     # Lokale Hochs und Tiefs fuer Support & Resistance (letzte 24 Kerzen auf 1h)
     recent_highs = [float(k[2]) for k in klines_1h[-24:]]
@@ -635,100 +649,128 @@ def get_trading_analysis(symbol: str = "BTCUSDT") -> Dict[str, Any]:
         range_status = "KAUF-ZONE (DIP / AKKUMULATION)"
     elif range_position_pct >= 70:
         range_status = "WIDERSTANDSZIELE / VERKAUF"
-        
+
+    # 2. Dynamische ATR-Puffer fuer gesunden Stop-Loss (kein sofortiges Rauskegeln durch Noise)
+    atr_val = atr_15m if atr_15m > 0 else (current_price * 0.015)
+    min_sl_dist = current_price * 0.012
+    max_sl_dist = current_price * 0.035
+    raw_sl_dist = max(min_sl_dist, min(max_sl_dist, atr_val * 1.6))
+
+    # Long Setup Vorbereitung
+    long_sl = smart_round(min(support_1 * 0.995, current_price - raw_sl_dist), current_price)
+    if long_sl >= current_price * 0.99:
+        long_sl = smart_round(current_price * 0.982, current_price)
+    long_risk = current_price - long_sl
+    long_tp1 = smart_round(current_price + (long_risk * 1.5), current_price)
+    long_tp2 = smart_round(current_price + (long_risk * 2.8), current_price)
+
+    # Short Setup Vorbereitung
+    short_sl = smart_round(max(resistance_1 * 1.005, current_price + raw_sl_dist), current_price)
+    if short_sl <= current_price * 1.01:
+        short_sl = smart_round(current_price * 1.018, current_price)
+    short_risk = short_sl - current_price
+    short_tp1 = smart_round(current_price - (short_risk * 1.5), current_price)
+    short_tp2 = smart_round(current_price - (short_risk * 2.8), current_price)
+
     signal = "WAIT"
     signal_label = "LIMIT-KAUF VORBEREITEN"
     setup_type = "Pullback-Order in Kauf-Range"
-    entry_target = smart_round(support_1 + (range_span * 0.15), current_price)
+    entry_target = smart_round(current_price, current_price)
     entry_min = buy_range_min
     entry_max = buy_range_max
-    stop_loss = smart_round(support_1 * 0.991, current_price)
-    take_profit_1 = smart_round(support_1 + (range_span * 0.55), current_price)
-    take_profit_2 = smart_round(resistance_1 * 0.995, current_price)
-    confidence = "8/10"
-    rationale = f"Kurs konsolidiert in der Range-Mitte ({range_position_pct}%). Nicht ueber Marktpreise kaufen, sondern Kauflimits in der Kauf-Range ({buy_range_label}) staffeln (Abstand: +{distance_to_buy_pct}%)."
+    stop_loss = long_sl
+    take_profit_1 = long_tp1
+    take_profit_2 = long_tp2
+    confidence = "7/10"
+    rationale = f"Kurs konsolidiert in der Range-Mitte ({range_position_pct}%). Warten auf klares Reversal-Setup."
 
-    # Reversal-Bestaetigung: Keine Kaeufe in fallende Messer!
-    curr_open = float(klines_15m[-1][1])
-    curr_close = closes_15m[-1]
-    prev_open = float(klines_15m[-2][1])
-    prev_close = closes_15m[-2]
-
-    is_candle_green = curr_close >= curr_open
-    is_prev_candle_green = prev_close >= prev_open
-    has_bounce = is_candle_green or is_prev_candle_green
-
-    # Pruefe uebergeordneten BTC-Trend wenn Altcoin
+    # Pruefe uebergeordneten BTC-Trend
     btc_regime = get_btc_market_regime()
     btc_ok = btc_regime.get("allow_altcoin_buys", True) or sym == "BTCUSDT"
 
-    if (range_position_pct <= 33 or distance_to_sup_pct <= 2.2) and rsi_15m <= 44:
-        if not btc_ok:
+    # Multi-Indikator Bestaetigungen
+    candle_is_bullish = candle_pattern.get("is_bullish", False) or (closes_15m[-1] > opens_15m[-1] and closes_15m[-2] >= opens_15m[-2])
+    buyer_dominance = vol_analysis.get("buyer_ratio", 50.0) >= 50.0 or vol_analysis.get("is_surge", False)
+    macd_bullish = macd_15m.get("status") in ["BULLISH", "BULLISH_CROSS"]
+    macd_bearish = macd_15m.get("status") in ["BEARISH", "BEARISH_CROSS"]
+    has_div = rsi_div.get("has_bullish_div", False)
+    trend_regime = trend_1h.get("regime", "NEUTRAL")
+
+    # REGEL 1: Wenn BTC im Abwaertstrend ist -> KEINE Altcoin-Longs!
+    if not btc_ok and sym != "BTCUSDT":
+        if (range_position_pct >= 65.0 or trend_regime == "BEARISH_DOWNTREND") and (rsi_15m >= 58.0 or macd_bearish):
+            signal = "SELL"
+            signal_label = "SHORT (BTC-ABVERKAUF NUTZEN)"
+            setup_type = "Trendfolge-Short mit Bitcoin-Rueckenwind"
+            entry_target = smart_round(current_price, current_price)
+            entry_min = smart_round(current_price * 0.998, current_price)
+            entry_max = smart_round(current_price * 1.008, current_price)
+            stop_loss = short_sl
+            take_profit_1 = short_tp1
+            take_profit_2 = short_tp2
+            confidence = "9/10"
+            rationale = f"BTC befindet sich im Abwaertstrend ({btc_regime.get('reason')}). {sym} zeigt Schwaeche (RSI 15m: {rsi_15m}, MACD: {macd_15m.get('status')}). Short-Position mit solidem CRV."
+        else:
             signal = "WAIT"
             signal_label = "WARTEN (BTC ABVERKAUF)"
             setup_type = "Marktweiter Stop wegen Bitcoin-Druck"
-            confidence = "6/10"
-            rationale = f"Coin waere zwar im Dip ({range_position_pct}%), aber Bitcoin faellt aktuell scharf ab ({btc_regime.get('reason')}). Generelles Kaufverbot zum Schutz vor fallenden Messern!"
-        elif has_bounce:
+            confidence = "8/10"
+            rationale = f"Keine Altcoin-Kaeufe: Bitcoin notiert im Abwaertstrend ({btc_regime.get('reason')}). Kapital bleibt geschuetzt."
+    # REGEL 2: Long Reversal an Support (nur wenn 1h Trend intakt oder Bullische RSI-Divergenz vorliegt)
+    elif (range_position_pct <= 35.0 or distance_to_sup_pct <= 2.5) and rsi_15m <= 48.0:
+        if trend_regime == "BEARISH_DOWNTREND" and not has_div:
+            signal = "WAIT"
+            signal_label = "WARTEN (1h ABWAERTSTREND)"
+            setup_type = "Uebergeordneter 1h-Trend faellt"
+            confidence = "7/10"
+            rationale = f"{sym} ist zwar guenstig ({range_position_pct}%), aber der uebergeordnete 1h-Trend ist baerisch. Einstieg erst bei Kerzen-Boden oder RSI-Divergenz."
+        elif candle_is_bullish and (buyer_dominance or has_div):
             signal = "BUY"
             signal_label = "KAUFEN (REVERSAL BESTAETIGT)"
-            setup_type = "Support-Bounce / Oversold Dip-Kauf"
+            setup_type = "Support-Bounce / Multi-Indikator Reversal"
             entry_target = smart_round(current_price, current_price)
             entry_min = buy_range_min
             entry_max = smart_round(max(current_price, buy_range_max), current_price)
-            stop_loss = smart_round(support_1 * 0.991, current_price)
-            take_profit_1 = smart_round(support_1 + (range_span * 0.55), current_price)
-            take_profit_2 = smart_round(resistance_1 * 0.995, current_price)
+            stop_loss = long_sl
+            take_profit_1 = long_tp1
+            take_profit_2 = long_tp2
             confidence = "9/10"
-            rationale = f"Kurs notiert mit {range_position_pct}% in der Kauf-Range ({buy_range_label}) und Reversal ist durch gruene Kerze bestaetigt. BTC ist stabil. RSI 15m ({rsi_15m}) zeigt starkes CRV."
+            div_text = f" | {rsi_div.get('description')}" if has_div else ""
+            rationale = f"Kurs prallt am Support ({support_1}) ab. {candle_pattern.get('label')}, Kaeufer dominieren ({vol_analysis.get('buyer_ratio')}%), RSI 15m: {rsi_15m}{div_text}. Trend ist gesund."
         else:
             signal = "WAIT"
             signal_label = "WARTEN (MESSER FAELLT NOCH)"
-            setup_type = "Warten auf Kerzen-Umkehr"
-            entry_target = smart_round(support_1, current_price)
-            entry_min = buy_range_min
-            entry_max = buy_range_max
-            stop_loss = smart_round(support_1 * 0.991, current_price)
-            take_profit_1 = smart_round(support_1 + (range_span * 0.55), current_price)
-            take_profit_2 = smart_round(resistance_1 * 0.995, current_price)
+            setup_type = "Warten auf Reversal-Bestaetigung"
             confidence = "7/10"
-            rationale = f"Kurs hat die Kauf-Range erreicht ({range_position_pct}%), aber die 15m-Kerzen fallen noch ohne Kaeufer (Messer faellt). Erst einsteigen wenn die erste gruene Reversal-Kerze schliesst!"
-    elif range_position_pct <= 35 and rsi_15m <= 50 and has_bounce and btc_ok:
-        signal = "BUY"
-        signal_label = "KAUFEN (AKKUMULATIONS-ZONE)"
-        setup_type = "Range-Bottom Akkumulation"
-        entry_target = smart_round(current_price, current_price)
-        entry_min = buy_range_min
-        entry_max = buy_range_max
-        stop_loss = smart_round(support_1 * 0.991, current_price)
-        take_profit_1 = smart_round(support_1 + (range_span * 0.55), current_price)
-        take_profit_2 = smart_round(resistance_1 * 0.995, current_price)
-        confidence = "8/10"
-        rationale = f"Kurs befindet sich im unteren Drittel der Handelsspanne ({range_position_pct}% vom Support) und Kaeufer stabilisieren den Boden. BTC ist stabil."
-    elif current_price >= (resistance_1 * 0.988) and rsi_15m >= 56 and rsi_1h >= 50 and btc_ok:
+            rationale = f"Kurs hat die Kauf-Range erreicht ({range_position_pct}%), aber es fehlt noch ein bullisches Kerzenmuster oder Kaeufer-Volumen."
+    # REGEL 3: Breakout-Momentum (Nur im echten 1h Bullentrend mit Volumen)
+    elif current_price >= (resistance_1 * 0.99) and trend_regime in ["BULLISH_UPTREND", "PULLBACK_SUPPORT"] and macd_bullish and buyer_dominance and rsi_15m >= 52.0:
         signal = "BUY"
         signal_label = "KAUFEN (BREAKOUT-MOMENTUM)"
         setup_type = "Widerstands-Ausbruch / Trendfolge"
         entry_target = smart_round(current_price, current_price)
-        entry_min = smart_round(resistance_1 * 0.992, current_price)
-        entry_max = smart_round(resistance_1 * 1.008, current_price)
-        stop_loss = smart_round(resistance_1 * 0.985, current_price)
-        take_profit_1 = smart_round(resistance_1 * 1.025, current_price)
-        take_profit_2 = smart_round(resistance_1 * 1.055, current_price)
+        entry_min = smart_round(resistance_1 * 0.995, current_price)
+        entry_max = smart_round(resistance_1 * 1.01, current_price)
+        breakout_sl = smart_round(current_price - raw_sl_dist, current_price)
+        stop_loss = breakout_sl
+        b_risk = current_price - breakout_sl
+        take_profit_1 = smart_round(current_price + (b_risk * 1.5), current_price)
+        take_profit_2 = smart_round(current_price + (b_risk * 2.8), current_price)
         confidence = "8/10"
-        rationale = f"Kurs bricht dynamisch an der oberen Range-Kante aus (RSI 15m: {rsi_15m}). BTC unterstuetzt den Ausbruch. Trendfolge-Kauf mit engem Stop."
-    elif range_position_pct >= 72 or (rsi_15m >= 68 and distance_to_res_pct < 2.0):
+        rationale = f"Ausbruch ueber Widerstand mit Volumenschub ({vol_analysis.get('surge_ratio')}x) und 1h-Aufwaertstrend. MACD bestaetigt Momentum."
+    # REGEL 4: Short an Widerstandszone
+    elif (range_position_pct >= 72.0 or (rsi_15m >= 68.0 and distance_to_res_pct < 2.0)) and (candle_pattern.get("pattern") == "BEARISH_REJECTION" or not candle_is_bullish):
         signal = "SELL"
-        signal_label = "GEWINNMITNAHME / WIDERSTAND"
+        signal_label = "SHORT (WIDERSTANDS-REJECTION)"
         setup_type = "Resistance-Rejection / Overbought Fade"
-        entry_target = smart_round(resistance_1 * 0.997, current_price)
-        entry_min = smart_round(resistance_1 * 0.992, current_price)
+        entry_target = smart_round(current_price, current_price)
+        entry_min = smart_round(current_price * 0.995, current_price)
         entry_max = smart_round(resistance_1 * 1.005, current_price)
-        stop_loss = smart_round(resistance_1 * 1.012, current_price)
-        take_profit_1 = smart_round(support_1 + (range_span * 0.5), current_price)
-        take_profit_2 = smart_round(buy_range_max, current_price)
+        stop_loss = short_sl
+        take_profit_1 = short_tp1
+        take_profit_2 = short_tp2
         confidence = "8/10"
-        rationale = f"Kurs ist im oberen Range-Bereich ({range_position_pct}%). RSI ({rsi_15m}) signalisiert Ueberhitzung. Gewinne sichern; Neukauf erst wieder in der Kauf-Range ({buy_range_label})."
+        rationale = f"Kurs am Widerstand ({resistance_1}) abgewiesen ({candle_pattern.get('label')}). RSI={rsi_15m:.1f}. Verkaeufer uebernehmen das Ruder."
 
     risk = abs(entry_target - stop_loss)
     reward_1 = abs(take_profit_1 - entry_target)
@@ -770,6 +812,14 @@ def get_trading_analysis(symbol: str = "BTCUSDT") -> Dict[str, Any]:
             "crv": f"{crv_2} : 1 (Ziel TP2)",
             "crv_tp1": f"{crv_1} : 1",
             "tactical_rationale": rationale
+        },
+        "indicators": {
+            "atr_15m": atr_15m,
+            "macd": macd_15m,
+            "vol_analysis": vol_analysis,
+            "candle_pattern": candle_pattern,
+            "trend_1h": trend_1h,
+            "rsi_div": rsi_div
         }
     }
 
@@ -805,7 +855,7 @@ BEST_PICK_CACHE: Dict[str, Any] = {"timestamp": 0, "data": None}
 
 @app.get("/api/best-pick")
 def get_best_buy_pick() -> Dict[str, Any]:
-    """Scannt alle Coins und ermittelt den aktuell lukrativsten Long- oder Short-Trade."""
+    """Scannt alle Coins und ermittelt den aktuell lukrativsten Long- oder Short-Trade anhand von 6-Faktor-Konfluenz."""
     now = time.time()
     if BEST_PICK_CACHE["data"] and (now - BEST_PICK_CACHE["timestamp"] < 60):
         return BEST_PICK_CACHE["data"]
@@ -819,42 +869,64 @@ def get_best_buy_pick() -> Dict[str, Any]:
             ticker = binance_get("/fapi/v1/ticker/24hr", {"symbol": sym})
             price_24h_pct = float(ticker["priceChangePercent"])
 
-            score = 50.0
+            indicators = analysis.get("indicators", {})
+            trend_data = indicators.get("trend_1h", {})
+            vol_data = indicators.get("vol_analysis", {})
+            candle_data = indicators.get("candle_pattern", {})
+            macd_data = indicators.get("macd", {})
+            div_data = indicators.get("rsi_div", {})
+
+            score = 30.0
             reasons = []
             rsi = analysis["rsi_15m"]
             range_pos = analysis.get("range_position_pct", 50.0)
             signal = analysis["signal"]
-            
-            # Basis-Score abhaengig von Signal-Typ
+            setup = analysis.get("trade_setup", {})
+
+            # 6-Faktor Konfluenz-Scoring
             if signal == "BUY":
-                score += 25.0
+                score += 20.0
                 reasons.append(f"Long-Signal: {analysis['signal_label']}")
-                if rsi < 30: score += 20.0
-                elif rsi < 45: score += 10.0
-                
-                if range_pos <= 25: score += 20.0
-                elif range_pos <= 40: score += 10.0
+                if trend_data.get("regime") in ["BULLISH_UPTREND", "PULLBACK_SUPPORT"]:
+                    score += 15.0
+                    reasons.append(f"1h-Trend intakt ({trend_data.get('label')})")
+                if candle_data.get("is_bullish"):
+                    score += 12.0
+                    reasons.append(f"Reversal-Kerze ({candle_data.get('label')})")
+                if vol_data.get("buyer_ratio", 50) >= 52.0 or vol_data.get("is_surge"):
+                    score += 10.0
+                    reasons.append(f"Kaeufer dominieren ({vol_data.get('buyer_ratio')}%)")
+                if macd_data.get("status") in ["BULLISH", "BULLISH_CROSS"]:
+                    score += 8.0
+                    reasons.append("MACD bullisch")
+                if div_data.get("has_bullish_div"):
+                    score += 15.0
+                    reasons.append("Smart Money RSI-Divergenz")
             elif signal == "SELL":
-                score += 25.0
+                score += 20.0
                 reasons.append(f"Short-Signal: {analysis['signal_label']}")
-                if rsi > 70: score += 20.0
-                elif rsi > 60: score += 10.0
-                
-                if range_pos >= 75: score += 20.0
-                elif range_pos >= 60: score += 10.0
+                if trend_data.get("regime") == "BEARISH_DOWNTREND":
+                    score += 15.0
+                    reasons.append("1h-Abwaertstrend bestaetigt")
+                if candle_data.get("pattern") == "BEARISH_REJECTION":
+                    score += 12.0
+                    reasons.append(f"Rejection-Kerze ({candle_data.get('label')})")
+                if vol_data.get("buyer_ratio", 50) < 45.0:
+                    score += 10.0
+                    reasons.append(f"Verkaeufer dominieren ({100 - vol_data.get('buyer_ratio', 50):.0f}%)")
+                if macd_data.get("status") in ["BEARISH", "BEARISH_CROSS"]:
+                    score += 8.0
+                    reasons.append("MACD baerisch")
             else:
-                score -= 20.0
+                score -= 15.0
                 reasons.append("Kein klares Signal (Warten)")
 
             # CRV Bonus
-            setup = analysis["trade_setup"]
-            tp2_pct = setup.get("take_profit_2_pct", 0)
-            sl_pct = setup.get("stop_loss_pct", 1)
-            if sl_pct > 0:
-                crv_calc = tp2_pct / sl_pct
-                if crv_calc >= 2.0:
-                    score += 10.0
-                    reasons.append(f"Starkes CRV ({setup['crv']})")
+            sl_pct = float(setup.get("stop_loss_pct", 1.5))
+            tp2_pct = float(setup.get("take_profit_2_pct", 3.0))
+            if sl_pct > 0 and (tp2_pct / sl_pct) >= 2.0:
+                score += 10.0
+                reasons.append(f"Solides CRV ({setup.get('crv', '')})")
 
             final_score = max(5.0, min(99.0, round(score, 1)))
 

@@ -3,6 +3,8 @@ __pycache__/
 .pytest_cache/
 *.log
 *.db
+.env
+*.env
 couple-app/backend/data/
 couple-app/client/node_modules/
 couple-app/client/dist/

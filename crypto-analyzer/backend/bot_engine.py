@@ -45,29 +45,28 @@ def ensure_data_files():
             json.dump([], f, indent=2)
 
 def calculate_ai_leverage(score: float, sl_pct: float, cfg: Dict[str, Any]) -> int:
-    """Ermittelt den optimalen Hebel anhand von KI-Score und Stop-Loss-Abstand."""
-    trading_mode = cfg.get("trading_mode", "SPOT").upper()
-    if trading_mode == "SPOT" or int(cfg.get("default_leverage", 1)) == 1 or int(cfg.get("max_leverage", 1)) == 1:
+    """Ermittelt den mathematisch nachhaltigen Hebel anhand von Konfidenz-Score und Volatilitaet."""
+    trading_mode = cfg.get("trading_mode", "FUTURES").upper()
+    if trading_mode == "SPOT":
         return 1
 
     mode = cfg.get("leverage_mode", "AI_DYNAMIC")
-    max_lev = int(cfg.get("max_leverage", 100))
+    max_lev = int(cfg.get("max_leverage", 10))
     if mode == "MANUAL":
-        return max(1, min(max_lev, int(cfg.get("default_leverage", 20))))
+        return max(1, min(max_lev, int(cfg.get("default_leverage", 5))))
         
-    # KI entscheidet autonom: Je hoeher der Score und je enger der Stop-Loss, desto aggressiver der Hebel
-    if score >= 95 and sl_pct <= 1.2:
-        lev = 100  # Maximaler Hebel bei Spitzen-Konfidenz
-    elif score >= 90 and sl_pct <= 1.8:
-        lev = 50
-    elif score >= 85:
-        lev = 30
-    elif score >= 75:
-        lev = 20
-    elif score >= 65:
+    # Nachhaltiges Risikomanagement (Profi-Quant-Standard: 2x bis max 10x Hebel)
+    # 50x-100x Hebel fuehrt im Krypto-Markt durch normalen Spread/Noise zur Liquidierung.
+    if score >= 90 and sl_pct <= 2.0:
         lev = 10
-    else:
+    elif score >= 82:
+        lev = 7
+    elif score >= 75:
         lev = 5
+    elif score >= 65:
+        lev = 3
+    else:
+        lev = 2
         
     return max(1, min(max_lev, lev))
 
@@ -367,19 +366,22 @@ def close_active_position(pos_id: str, exit_reason: str, proxies: Optional[Dict[
             daemon=True
         ).start()
             
+    position_side = pos.get("side", "LONG").upper()
     leverage = int(pos.get("leverage", 1))
     margin_spent = float(pos.get("margin_spent", pos.get("quote_spent", 50.0)))
     entry_price = float(pos.get("entry_price", avg_exit_price))
 
-    # Sanity-Check: Verhindere absurde PnL-Spikes durch fehlerhafte Test-Preise
-    raw_diff = (avg_exit_price - entry_price) / entry_price if entry_price > 0 else 0.0
-    if pos.get("side", "LONG") == "SHORT":
-        raw_diff = -raw_diff
-    base_diff = max(-1.0, min(10.0, raw_diff)) # allow bigger moves
+    # Exakte Richtungsberechnung: Bei SHORT ist fallender Kurs Gewinn!
+    if position_side == "SHORT":
+        raw_diff = (entry_price - avg_exit_price) / entry_price if entry_price > 0 else 0.0
+    else:
+        raw_diff = (avg_exit_price - entry_price) / entry_price if entry_price > 0 else 0.0
+
+    base_diff = max(-1.0, min(10.0, raw_diff))
 
     roi_pct = round(base_diff * 100 * leverage, 2)
     pnl_usdt = round(margin_spent * (base_diff * leverage), 2)
-    quote_received = round(margin_spent + pnl_usdt, 2)
+    quote_received = round(max(0.0, margin_spent + pnl_usdt), 2)
     
     # Position sofort aus aktiven Positionen entfernen
     positions = [p for p in positions if p.get("id") != pos_id]
@@ -475,61 +477,77 @@ def check_open_positions_lifecycle(get_current_price_func, analysis_func, proxie
             pos["current_price"] = curr_price
             leverage = int(pos.get("leverage", 1))
             margin_spent = float(pos.get("margin_spent", pos.get("quote_spent", 50.0)))
-            raw_roi = (curr_price - entry_price) / entry_price if entry_price > 0 else 0.0
-            base_roi = max(-0.35, min(0.35, raw_roi))
-            pos["unrealized_roi_pct"] = round(base_roi * 100 * leverage, 2)
-            pos["unrealized_pnl_usdt"] = round(margin_spent * base_roi * leverage, 2)
+            pos_side = pos.get("side", "LONG").upper()
+
+            # Richtungsabhaengige Preisbewegung (Basisgewinn ohne Hebel)
+            if pos_side == "SHORT":
+                raw_price_gain_pct = ((entry_price - curr_price) / entry_price) * 100 if entry_price > 0 else 0.0
+            else:
+                raw_price_gain_pct = ((curr_price - entry_price) / entry_price) * 100 if entry_price > 0 else 0.0
+
+            pos["unrealized_roi_pct"] = round(raw_price_gain_pct * leverage, 2)
+            pos["unrealized_pnl_usdt"] = round(margin_spent * (raw_price_gain_pct / 100.0) * leverage, 2)
             
             # Peak Price Tracking fuer Trailing-Profit-Stop
-            peak_price = float(pos.get("peak_price", entry_price))
-            if curr_price > peak_price:
-                peak_price = curr_price
-                pos["peak_price"] = peak_price
-                
-            pullback_from_peak_pct = ((peak_price - curr_price) / peak_price) * 100
+            if pos_side == "SHORT":
+                best_price = float(pos.get("peak_price", entry_price))
+                if curr_price < best_price:
+                    best_price = curr_price
+                    pos["peak_price"] = best_price
+                pullback_pct = ((curr_price - best_price) / best_price) * 100 if best_price > 0 else 0.0
+            else:
+                best_price = float(pos.get("peak_price", entry_price))
+                if curr_price > best_price:
+                    best_price = curr_price
+                    pos["peak_price"] = best_price
+                pullback_pct = ((best_price - curr_price) / best_price) * 100 if best_price > 0 else 0.0
             
             # 1. STOP-LOSS TRIGGER (Harter Kapitalschutz)
-            if cfg.get("auto_stop_loss", True) and curr_price <= stop_loss:
-                add_bot_log("WARNING", f"Stop-Loss ausgeloest fuer {coin} bei ${curr_price:.2f} (SL: ${stop_loss:.2f})")
-                close_active_position(pos_id, f"Stop-Loss erreicht (-{abs(pos['unrealized_roi_pct'])}%)", proxies=proxies)
+            is_sl_hit = (curr_price >= stop_loss) if pos_side == "SHORT" else (curr_price <= stop_loss)
+            if cfg.get("auto_stop_loss", True) and is_sl_hit:
+                add_bot_log("WARNING", f"Stop-Loss ausgeloest fuer {coin} ({pos_side}) bei ${curr_price:.2f} (SL: ${stop_loss:.2f})")
+                close_active_position(pos_id, f"Stop-Loss erreicht ({pos['unrealized_roi_pct']}%)", proxies=proxies)
                 continue
                 
             # 2. DYNAMISCHER TRAILING-PROFIT-STOP (Gewinne sichern statt wieder herzugeben)
-            # Wenn Position bereits mind. +1.5% im Gewinn war und nun um >= 0.6% vom Hoechststand nachgibt:
-            if pos["unrealized_roi_pct"] >= 1.5 and pullback_from_peak_pct >= 0.6:
-                add_bot_log("SUCCESS", f"Trailing-Profit-Stop fuer {coin}: Vom Peak (${peak_price:.2f}) um -{pullback_from_peak_pct:.2f}% nachgegeben. Gewinn mitgenommen!")
+            # Relevanter Basis-Kursgewinn (ohne Hebel-Multiplikator) mind. +1.5%
+            # Wenn der Kurs danach um >= 0.8% vom Bestwert zurueckfaellt -> Gewinnmitnahme
+            if raw_price_gain_pct >= 1.5 and pullback_pct >= 0.8:
+                add_bot_log("SUCCESS", f"Trailing-Profit-Stop fuer {coin} ({pos_side}): Bestwert (${best_price:.2f}), Pullback {pullback_pct:.2f}%. Gewinn gesichert!")
                 close_active_position(pos_id, f"Trailing-Profit-Stop (+{pos['unrealized_roi_pct']}%)", proxies=proxies)
                 continue
                 
-            # 3. DYNAMISCHER RSI-UEBERHITZUNGS-EXIT (Gewinnmitnahme am oberen Band)
-            # Nur pruefen wenn Position ueberhaupt im Gewinn ist (ROI >= 1.0%), um API-Aufrufe zu sparen
-            if pos.get("unrealized_roi_pct", 0) >= 1.0:
+            # 3. DYNAMISCHER RSI-UEBERHITZUNGS-EXIT (Gewinnmitnahme bei Erschoepfung)
+            if raw_price_gain_pct >= 1.5:
                 try:
                     analysis = analysis_func(sym)
                     rsi_val = float(analysis.get("rsi_15m", 50.0))
                     range_p = float(analysis.get("range_position_pct", 50.0))
-                    if rsi_val >= 68.0 or range_p >= 75.0:
-                        add_bot_log("SUCCESS", f"Dynamischer RSI/Widerstands-Exit fuer {coin}: RSI={rsi_val:.1f}, Range={range_p:.1f}%. Gewinn gesichert!")
-                        close_active_position(pos_id, f"RSI-Ueberhitzung / Widerstand (+{pos['unrealized_roi_pct']}%)", proxies=proxies)
+                    should_exit_rsi = (rsi_val >= 70.0 or range_p >= 75.0) if pos_side == "LONG" else (rsi_val <= 30.0 or range_p <= 25.0)
+                    if should_exit_rsi:
+                        add_bot_log("SUCCESS", f"Dynamischer RSI-Exit fuer {coin} ({pos_side}): RSI={rsi_val:.1f}, Range={range_p:.1f}%. Gewinn gesichert!")
+                        close_active_position(pos_id, f"RSI-Exit (+{pos['unrealized_roi_pct']}%)", proxies=proxies)
                         continue
                 except Exception:
                     pass
                 
             # 4. TAKE-PROFIT 2 (Hauptziel erreicht -> Komplettverkauf mit maximalem Gewinn)
-            if cfg.get("auto_take_profit", True) and curr_price >= tp2:
-                add_bot_log("SUCCESS", f"Take-Profit 2 erreicht fuer {coin} bei ${curr_price:.2f} (Ziel: ${tp2:.2f})")
+            is_tp2_hit = (curr_price <= tp2) if pos_side == "SHORT" else (curr_price >= tp2)
+            if cfg.get("auto_take_profit", True) and is_tp2_hit:
+                add_bot_log("SUCCESS", f"Take-Profit 2 erreicht fuer {coin} ({pos_side}) bei ${curr_price:.2f} (Ziel: ${tp2:.2f})")
                 close_active_position(pos_id, f"Take-Profit 2 erreicht (+{pos['unrealized_roi_pct']}%)", proxies=proxies)
                 continue
                 
             # 5. TAKE-PROFIT 1 (Teilziel erreicht -> Breakeven-Stop anheben fuer 100% risikofreien Trade)
-            if cfg.get("break_even_on_tp1", True) and curr_price >= tp1 and not pos.get("tp1_reached", False):
+            is_tp1_hit = (curr_price <= tp1) if pos_side == "SHORT" else (curr_price >= tp1)
+            if cfg.get("break_even_on_tp1", True) and is_tp1_hit and not pos.get("tp1_reached", False):
                 pos["tp1_reached"] = True
-                new_sl = round(entry_price * 1.002, 4)
+                new_sl = round(entry_price * 0.998, 4) if pos_side == "SHORT" else round(entry_price * 1.002, 4)
                 pos["stop_loss"] = new_sl
-                add_bot_log("INFO", f"TP1 erreicht fuer {coin}! Stop-Loss auf Break-Even (${new_sl}) angehoben.")
+                add_bot_log("INFO", f"TP1 erreicht fuer {coin} ({pos_side})! Stop-Loss auf Break-Even (${new_sl}) angehoben.")
                 
-            # 4. SMART SCALE-IN / DIP-NACHKAUF (Wenn Kurs faellt und es sich technisch lohnt)
-            enable_dca = cfg.get("enable_smart_dca", True)
+            # 6. SMART SCALE-IN / DIP-NACHKAUF: Nur im reinen Spot-Modus erlaubt! Im Hebel-Modus streng verboten.
+            enable_dca = cfg.get("enable_smart_dca", True) and (leverage <= 1) and (cfg.get("trading_mode", "FUTURES").upper() == "SPOT")
             dca_count = int(pos.get("dca_count", 0))
             max_dca = int(cfg.get("max_dca_levels", 2))
             
@@ -847,21 +865,29 @@ def scan_and_open_new_trades(analysis_func, best_pick_func, btc_regime_func=None
                     try:
                         analysis = analysis_func(sym)
                         setup = analysis.get("trade_setup", {})
-                        sl_val = float(setup.get("stop_loss", avg_price * 0.985))
-                        tp1_val = float(setup.get("take_profit_1", avg_price * 1.025))
-                        tp2_val = float(setup.get("take_profit_2", avg_price * 1.055))
+                        sl_val = float(setup.get("stop_loss", 0.0))
+                        tp1_val = float(setup.get("take_profit_1", 0.0))
+                        tp2_val = float(setup.get("take_profit_2", 0.0))
                     except Exception:
-                        sl_val = avg_price * 0.985
-                        tp1_val = avg_price * 1.025
-                        tp2_val = avg_price * 1.055
+                        sl_val, tp1_val, tp2_val = 0.0, 0.0, 0.0
 
-                    # Sanity-Pruefung: SL MUSS unter avg_price liegen, TP MUSS darueber liegen!
-                    if sl_val >= avg_price or sl_val <= 0:
-                        sl_val = avg_price * 0.985
-                    if tp1_val <= avg_price:
-                        tp1_val = avg_price * 1.025
-                    if tp2_val <= tp1_val:
-                        tp2_val = avg_price * 1.055
+                    # Saubere Trennung fuer SHORT vs LONG
+                    if position_side == "SHORT":
+                        if sl_val <= avg_price or sl_val <= 0:
+                            sl_val = avg_price * 1.02
+                        if tp1_val >= avg_price or tp1_val <= 0:
+                            tp1_val = avg_price * 0.975
+                        if tp2_val >= tp1_val or tp2_val <= 0:
+                            tp2_val = avg_price * 0.95
+                        liq_price = smart_round(avg_price * (1.0 + (0.88 / leverage)), avg_price) if leverage > 1 else smart_round(avg_price * 1.5, avg_price)
+                    else:
+                        if sl_val >= avg_price or sl_val <= 0:
+                            sl_val = avg_price * 0.98
+                        if tp1_val <= avg_price:
+                            tp1_val = avg_price * 1.025
+                        if tp2_val <= tp1_val:
+                            tp2_val = avg_price * 1.055
+                        liq_price = smart_round(avg_price * (1.0 - (0.88 / leverage)), avg_price) if leverage > 1 else smart_round(avg_price * 0.5, avg_price)
 
                     sl_val = smart_round(sl_val, avg_price)
                     tp1_val = smart_round(tp1_val, avg_price)
@@ -871,7 +897,6 @@ def scan_and_open_new_trades(analysis_func, best_pick_func, btc_regime_func=None
                     leverage = calculate_ai_leverage(score, sl_dist_pct, cfg)
                     notional_val = actual_spent * leverage
                     leveraged_qty = round(executed_qty * leverage, 5)
-                    liq_price = smart_round(avg_price * (1.0 - (0.88 / leverage)), avg_price) if leverage > 1 else smart_round(avg_price * 0.5, avg_price)
                     clean_entry = smart_round(avg_price, avg_price)
 
                     new_pos = {

@@ -555,19 +555,19 @@ export const AutoTradingPanel: React.FC<AutoTradingPanelProps> = ({
         <div className="control-card">
           <div className="control-label">Hebel & Multiplier (Futures):</div>
           <div className="amount-chips">
-            {['AI', 10, 25, 50, 100].map((lev) => {
+            {['AI', 2, 3, 5, 10].map((lev) => {
               const isAi = lev === 'AI';
               const currentMode = serverBot?.config?.leverage_mode || 'AI_DYNAMIC';
-              const currentVal = serverBot?.config?.default_leverage || 20;
+              const currentVal = serverBot?.config?.default_leverage || 5;
               const isSelected = isAi ? currentMode === 'AI_DYNAMIC' : (currentMode === 'MANUAL' && currentVal === lev);
               return (
                 <button
                   key={String(lev)}
                   onClick={async () => {
                     if (isAi) {
-                      await updateServerBotConfig({ leverage_mode: 'AI_DYNAMIC' });
+                      await updateServerBotConfig({ leverage_mode: 'AI_DYNAMIC', max_leverage: 10 });
                     } else {
-                      await updateServerBotConfig({ leverage_mode: 'MANUAL', default_leverage: lev });
+                      await updateServerBotConfig({ leverage_mode: 'MANUAL', default_leverage: lev, max_leverage: lev });
                     }
                     refreshAll();
                   }}
@@ -580,8 +580,8 @@ export const AutoTradingPanel: React.FC<AutoTradingPanelProps> = ({
           </div>
           <div className="control-sub">
             {(serverBot?.config?.leverage_mode || 'AI_DYNAMIC') === 'AI_DYNAMIC'
-              ? 'KI wählt Hebel (5x bis 100x) autonom anhand von Setup-Score & Stop-Loss-Distanz.'
-              : `Fester Hebel: ${serverBot?.config?.default_leverage || 20}x aktiv.`}
+              ? 'KI wählt nachhaltigen Hebel (2x bis 10x) autonom anhand von Konfluenz-Score & ATR-Puffer.'
+              : `Fester Hebel: ${serverBot?.config?.default_leverage || 5}x aktiv.`}
           </div>
         </div>
 
