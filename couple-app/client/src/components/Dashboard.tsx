@@ -206,17 +206,17 @@ export default function Dashboard({
         {/* Linke Spalte auf Desktop: Liebes-Counter & Großer Herz-Rahmen */}
         <div className="space-y-3.5 lg:col-span-7 w-full">
           {/* Love Counter Hero Card */}
-          <div className="glass-panel p-4 rounded-3xl relative overflow-hidden text-center shadow-xs">
+          <div className="glass-panel p-4.5 sm:p-5 rounded-3xl relative overflow-hidden text-center shadow-xs">
         <div className="relative z-10">
-          <span className="text-[10px] uppercase tracking-widest font-extrabold text-gray-400">
+          <span className="text-xs uppercase tracking-widest font-extrabold text-gray-500 block">
             Unsere Liebesgeschichte
           </span>
-          <div className="text-3xl font-black gradient-text my-0.5 flex items-center justify-center gap-1.5">
+          <div className="text-4xl sm:text-5xl font-black gradient-text my-1 flex items-center justify-center gap-2">
             <span>{daysTogether}</span>
-            <span className="text-xl font-extrabold text-gray-600">Tage</span>
-            <Heart size={22} className="text-pink-500 animate-bounce" fill="currentColor" />
+            <span className="text-2xl sm:text-3xl font-extrabold text-gray-600">Tage</span>
+            <Heart size={26} className="text-pink-500 animate-bounce" fill="currentColor" />
           </div>
-          <p className="text-[11px] text-gray-500 font-medium truncate">
+          <p className="text-xs sm:text-sm text-gray-600 font-semibold truncate">
             Jeder einzelne Tag mit dir ist besonders ✨
           </p>
         </div>
@@ -236,13 +236,13 @@ export default function Dashboard({
               <span className="text-xs">💖</span>
             </div>
             
-            <div className="flex items-center gap-1.5 bg-white/90 backdrop-blur-xs px-3 py-0.5 rounded-full shadow-xs border border-pink-200">
-              <Heart size={12} className="text-pink-500 fill-current animate-pulse" />
-              <span className="text-[10px] uppercase tracking-wider font-black text-pink-700">
+            <div className="flex items-center gap-2 bg-white/95 backdrop-blur-xs px-3.5 py-1 rounded-full shadow-xs border border-pink-200">
+              <Heart size={14} className="text-pink-500 fill-current animate-pulse" />
+              <span className="text-xs uppercase tracking-wider font-black text-pink-700">
                 Unsere Momente
               </span>
               {photos.length > 0 && (
-                <span className="text-[9px] font-extrabold text-pink-500 bg-pink-50 px-1.5 py-0.2 rounded-full">
+                <span className="text-xs font-black text-pink-500 bg-pink-50 px-2 py-0.5 rounded-full">
                   {currentPhotoIdx % photos.length + 1}/{photos.length}
                 </span>
               )}
@@ -320,17 +320,17 @@ export default function Dashboard({
                 )}
 
                 {/* Untere Bildunterschrift mit Milchglas-Optik */}
-                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent pt-8 pb-2 px-3 rounded-b-[18px] text-white flex items-end justify-between gap-2 z-10">
+                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent pt-8 pb-3 px-3.5 rounded-b-[18px] text-white flex items-end justify-between gap-2 z-10">
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-extrabold text-xs sm:text-sm text-white truncate drop-shadow-sm flex items-center gap-1">
+                    <h3 className="font-extrabold text-sm sm:text-base text-white truncate drop-shadow-sm flex items-center gap-1">
                       <span>{activePhoto.title || 'Unser Schnappschuss 💕'}</span>
                     </h3>
-                    <p className="text-[10px] text-white/80 font-medium truncate">
+                    <p className="text-xs text-white/90 font-medium truncate mt-0.5">
                       Von {activePhoto.author} • {activePhoto.created_at || 'Gemeinsamer Moment'}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     {/* Like Button */}
                     <button
                       type="button"
@@ -338,10 +338,10 @@ export default function Dashboard({
                         e.stopPropagation();
                         onLikePhoto?.(activePhoto.id);
                       }}
-                      className="bg-white/20 hover:bg-white/30 backdrop-blur-md px-2.5 py-1 rounded-full text-xs font-black flex items-center gap-1 transition-all active:scale-90 text-white shadow-xs"
+                      className="bg-white/20 hover:bg-white/30 backdrop-blur-md px-3 py-1.5 rounded-full text-xs sm:text-sm font-black flex items-center gap-1.5 transition-all active:scale-90 text-white shadow-xs"
                       title="Gefällt mir"
                     >
-                      <Heart size={13} className="text-rose-400 fill-current" />
+                      <Heart size={15} className="text-rose-400 fill-current" />
                       <span>{activePhoto.likes || 0}</span>
                     </button>
 
@@ -352,10 +352,10 @@ export default function Dashboard({
                         e.stopPropagation();
                         setSelectedFullscreenPhoto(activePhoto);
                       }}
-                      className="bg-white/20 hover:bg-white/30 backdrop-blur-md p-1.5 rounded-full text-white transition-all active:scale-90 shadow-xs"
+                      className="bg-white/20 hover:bg-white/30 backdrop-blur-md p-2 rounded-full text-white transition-all active:scale-90 shadow-xs"
                       title="Großansicht"
                     >
-                      <Maximize2 size={13} />
+                      <Maximize2 size={15} />
                     </button>
                   </div>
                 </div>
@@ -428,22 +428,22 @@ export default function Dashboard({
     <div className="space-y-3.5 lg:col-span-5 w-full">
       {/* Birthday Banner if available */}
       {nextBirthdayInfo && (
-        <div className="bg-gradient-to-r from-amber-400 via-rose-300 to-pink-400 text-white p-3 rounded-2xl shadow-sm flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 bg-white/25 rounded-xl flex items-center justify-center shrink-0">
-              <Cake size={18} />
+        <div className="bg-gradient-to-r from-amber-400 via-rose-300 to-pink-400 text-white p-3.5 sm:p-4 rounded-2xl shadow-sm flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 bg-white/25 rounded-xl flex items-center justify-center shrink-0">
+              <Cake size={20} />
             </div>
             <div className="min-w-0">
-              <span className="text-[9px] font-black uppercase tracking-wider text-amber-100 block truncate">
+              <span className="text-xs font-black uppercase tracking-wider text-amber-100 block truncate">
                 Geburtstags-Countdown 🎂
               </span>
-              <p className="font-extrabold text-xs truncate">
+              <p className="font-extrabold text-sm sm:text-base truncate">
                 {nextBirthdayInfo.name} ({nextBirthdayInfo.formattedDate})
               </p>
             </div>
           </div>
           <div className="text-right shrink-0 pl-2">
-            <span className="text-lg font-black leading-none block">
+            <span className="text-xl sm:text-2xl font-black leading-none block">
               {nextBirthdayInfo.days === 0 ? 'Heute! 🎉' : `in ${nextBirthdayInfo.days} T.`}
             </span>
           </div>
@@ -454,20 +454,20 @@ export default function Dashboard({
       {countdown && (
         <div
           onClick={() => onNavigateTab('calendar')}
-          className="cursor-pointer bg-gradient-to-r from-pink-400 via-rose-400 to-purple-400 text-white p-3.5 rounded-2xl shadow-sm flex items-center justify-between transition-transform active:scale-98"
+          className="cursor-pointer bg-gradient-to-r from-pink-400 via-rose-400 to-purple-400 text-white p-4 rounded-2xl shadow-sm flex items-center justify-between transition-transform active:scale-98"
         >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center shrink-0 backdrop-blur-xs">
-              <Sparkles size={18} className="animate-spin text-white" style={{ animationDuration: '6s' }} />
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center shrink-0 backdrop-blur-xs">
+              <Sparkles size={20} className="animate-spin text-white" style={{ animationDuration: '6s' }} />
             </div>
             <div className="min-w-0">
-              <span className="text-[9px] font-black uppercase tracking-wider text-pink-100 block">Vorfreude-Zähler</span>
-              <h3 className="font-bold text-xs truncate leading-tight">{countdown.title}</h3>
+              <span className="text-xs font-black uppercase tracking-wider text-pink-100 block">Vorfreude-Zähler</span>
+              <h3 className="font-black text-sm sm:text-base truncate leading-tight">{countdown.title}</h3>
             </div>
           </div>
           <div className="text-right shrink-0 pl-2">
-            <div className="text-xl font-black leading-none">{diffDays}</div>
-            <div className="text-[9px] font-bold text-pink-100 uppercase">Tage</div>
+            <div className="text-2xl sm:text-3xl font-black leading-none">{diffDays}</div>
+            <div className="text-xs font-bold text-pink-100 uppercase">Tage</div>
           </div>
         </div>
       )}
@@ -475,46 +475,46 @@ export default function Dashboard({
       {/* Date-Night Roulette Banner */}
       <div
         onClick={() => onNavigateTab('calendar')}
-        className="cursor-pointer glass-panel p-3.5 rounded-2xl shadow-xs border border-pink-200/90 hover:border-pink-300 transition-all flex items-center justify-between active:scale-98 group"
+        className="cursor-pointer glass-panel p-4 rounded-2xl shadow-xs border border-pink-200/90 hover:border-pink-300 transition-all flex items-center justify-between active:scale-98 group"
       >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-500 to-purple-400 text-white flex items-center justify-center shrink-0 shadow-xs">
-            <span className="text-xl">🎡</span>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-pink-500 to-purple-400 text-white flex items-center justify-center shrink-0 shadow-xs">
+            <span className="text-2xl">🎡</span>
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-black uppercase text-pink-600 tracking-wide">
+              <span className="text-xs font-black uppercase text-pink-600 tracking-wide">
                 Date-Night Roulette
               </span>
-              <span className="bg-pink-100 text-pink-600 text-[8px] font-black px-1.5 py-0.2 rounded-full">Neu</span>
+              <span className="bg-pink-100 text-pink-600 text-[9px] font-black px-2 py-0.2 rounded-full">Neu</span>
             </div>
-            <h4 className="font-black text-xs text-gray-800 truncate">
+            <h4 className="font-black text-sm sm:text-base text-gray-800 truncate">
               Was machen wir heute Schönes?
             </h4>
-            <p className="text-[10px] text-gray-500 truncate">
+            <p className="text-xs text-gray-500 truncate">
               Tippen, um am Date-Glücksrad zu drehen! 🎲
             </p>
           </div>
         </div>
 
         <div className="shrink-0 pl-2">
-          <span className="bg-pink-100 group-hover:bg-pink-200 text-pink-700 font-extrabold text-[11px] px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1">
+          <span className="bg-pink-100 group-hover:bg-pink-200 text-pink-700 font-extrabold text-xs sm:text-sm px-3.5 py-2 rounded-xl transition-colors flex items-center gap-1">
             Drehen 🎡
           </span>
         </div>
       </div>
 
       {/* Mood Sharing Widget */}
-      <div className="glass-panel p-3.5 rounded-2xl shadow-xs">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-1.5">
-            <span className="text-base">💖</span>
-            <h3 className="text-xs font-black text-gray-700">Stimmungs-Radar</h3>
+      <div className="glass-panel p-4 rounded-2xl shadow-xs">
+        <div className="flex items-center justify-between mb-2.5">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">💖</span>
+            <h3 className="text-sm sm:text-base font-black text-gray-800">Stimmungs-Radar</h3>
           </div>
           <button
             type="button"
             onClick={() => setIsEditingMood(!isEditingMood)}
-            className="text-[11px] font-extrabold text-[var(--color-primary-dark)] hover:underline"
+            className="text-xs sm:text-sm font-extrabold text-[var(--color-primary-dark)] hover:underline"
           >
             {isEditingMood ? 'Fertig' : 'Mein Status'}
           </button>
@@ -557,49 +557,49 @@ export default function Dashboard({
         ) : (
           <div className="grid grid-cols-2 gap-2">
             {/* My Mood */}
-            <div className="bg-white/80 p-2.5 rounded-xl border border-pink-100 text-center flex flex-col justify-between min-w-0">
-              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wide truncate">
+            <div className="bg-white/80 p-3 rounded-xl border border-pink-100 text-center flex flex-col justify-between min-w-0">
+              <span className="text-[10px] font-black text-gray-500 uppercase tracking-wide truncate">
                 Ich ({currentPartnerName})
               </span>
-              <div className="text-2xl my-0.5">{myMood.emoji}</div>
-              <p className="text-[11px] font-bold text-gray-700 truncate">{myMood.text || 'Kein Status'}</p>
-              <span className="text-[8px] text-gray-400 mt-0.5">{myMood.updated_at}</span>
+              <div className="text-3xl my-1">{myMood.emoji}</div>
+              <p className="text-xs sm:text-sm font-bold text-gray-800 truncate">{myMood.text || 'Kein Status'}</p>
+              <span className="text-[10px] text-gray-400 mt-0.5">{myMood.updated_at}</span>
             </div>
 
             {/* Partner's Mood */}
-            <div className="bg-gradient-to-br from-pink-50/70 to-purple-50/70 p-2.5 rounded-xl border border-purple-100 text-center flex flex-col justify-between min-w-0">
-              <span className="text-[9px] font-bold text-purple-600 uppercase tracking-wide truncate">
+            <div className="bg-gradient-to-br from-pink-50/70 to-purple-50/70 p-3 rounded-xl border border-purple-100 text-center flex flex-col justify-between min-w-0">
+              <span className="text-[10px] font-black text-purple-600 uppercase tracking-wide truncate">
                 {partnerName}
               </span>
-              <div className="text-2xl my-0.5">{partnerMood.emoji}</div>
-              <p className="text-[11px] font-bold text-gray-700 truncate">{partnerMood.text || 'Kein Status'}</p>
-              <span className="text-[8px] text-gray-400 mt-0.5">{partnerMood.updated_at}</span>
+              <div className="text-3xl my-1">{partnerMood.emoji}</div>
+              <p className="text-xs sm:text-sm font-bold text-gray-800 truncate">{partnerMood.text || 'Kein Status'}</p>
+              <span className="text-[10px] text-gray-400 mt-0.5">{partnerMood.updated_at}</span>
             </div>
           </div>
         )}
       </div>
 
       {/* Virtual Hug & Love Button */}
-      <div className="glass-panel p-3 rounded-2xl shadow-xs text-center relative overflow-hidden">
+      <div className="glass-panel p-4 rounded-2xl shadow-xs text-center relative overflow-hidden">
         {showHeartBurst && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-20">
-            <span className="text-4xl animate-ping">💖</span>
+            <span className="text-5xl animate-ping">💖</span>
           </div>
         )}
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-3">
           <div className="text-left min-w-0">
-            <div className="flex items-center gap-1">
-              <Heart size={14} className="text-pink-500 shrink-0" fill="currentColor" />
-              <span className="text-xs font-black text-gray-700 truncate">Umarmungs-Konto</span>
+            <div className="flex items-center gap-1.5">
+              <Heart size={16} className="text-pink-500 shrink-0" fill="currentColor" />
+              <span className="text-sm font-black text-gray-800 truncate">Umarmungs-Konto</span>
             </div>
-            <p className="text-[11px] text-gray-500 mt-0.5 truncate">
+            <p className="text-xs text-gray-600 mt-0.5 truncate">
               Bereits <strong className="text-pink-600 font-extrabold">{profile.hugs_count}</strong> getauscht!
             </p>
           </div>
           <button
             type="button"
             onClick={triggerHug}
-            className="bg-gradient-to-r from-pink-500 to-rose-400 text-white px-3 py-2 rounded-xl text-xs font-extrabold shadow-xs hover:shadow-md active:scale-95 flex items-center gap-1 shrink-0 transition-all"
+            className="bg-gradient-to-r from-pink-500 to-rose-400 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black shadow-xs hover:shadow-md active:scale-95 flex items-center gap-1.5 shrink-0 transition-all"
           >
             <span>Drück mich!</span> 🤗
           </button>
@@ -607,20 +607,20 @@ export default function Dashboard({
       </div>
 
       {/* Quick Access 2x2 Grid */}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2.5">
         {/* Next Date */}
         <div
           onClick={() => onNavigateTab('calendar')}
-          className="glass-panel p-3 rounded-2xl cursor-pointer hover:bg-white/95 transition-all border border-pink-50 min-w-0"
+          className="glass-panel p-3.5 rounded-2xl cursor-pointer hover:bg-white/95 transition-all border border-pink-50 min-w-0"
         >
           <div className="flex items-center gap-1.5 mb-1 text-pink-500">
-            <Calendar size={14} className="shrink-0" />
-            <span className="text-[11px] font-extrabold text-gray-600 truncate">Nächstes Date</span>
+            <Calendar size={15} className="shrink-0" />
+            <span className="text-xs font-black text-gray-600 truncate">Nächstes Date</span>
           </div>
-          <p className="text-xs font-bold text-gray-800 truncate">
+          <p className="text-sm font-black text-gray-800 truncate">
             {nextEvent ? nextEvent.title : 'Kein Date'}
           </p>
-          <span className="text-[9px] text-gray-400 block truncate">
+          <span className="text-[10px] text-gray-400 block truncate">
             {nextEvent ? nextEvent.date : 'Tippen zum Planen'}
           </span>
         </div>
@@ -628,16 +628,16 @@ export default function Dashboard({
         {/* Today's Meal */}
         <div
           onClick={() => onNavigateTab('meals')}
-          className="glass-panel p-3 rounded-2xl cursor-pointer hover:bg-white/95 transition-all border border-pink-50 min-w-0"
+          className="glass-panel p-3.5 rounded-2xl cursor-pointer hover:bg-white/95 transition-all border border-pink-50 min-w-0"
         >
           <div className="flex items-center gap-1.5 mb-1 text-purple-500">
-            <Utensils size={14} className="shrink-0" />
-            <span className="text-[11px] font-extrabold text-gray-600 truncate">Heute kochen</span>
+            <Utensils size={15} className="shrink-0" />
+            <span className="text-xs font-black text-gray-600 truncate">Heute kochen</span>
           </div>
-          <p className="text-xs font-bold text-gray-800 truncate">
+          <p className="text-sm font-black text-gray-800 truncate">
             {todaysMeal?.meal_name ? todaysMeal.meal_name : 'Noch nichts'}
           </p>
-          <span className="text-[9px] text-gray-400 block truncate">
+          <span className="text-[10px] text-gray-400 block truncate">
             {todaysMeal?.cook ? `${todaysMeal.cook}` : 'Zum Wochenplan'}
           </span>
         </div>
@@ -645,7 +645,7 @@ export default function Dashboard({
         {/* Shopping list shortcut */}
         <div
           onClick={() => onNavigateTab('lists')}
-          className="glass-panel p-3 rounded-2xl cursor-pointer hover:bg-white/95 transition-all border border-pink-50 min-w-0"
+          className="glass-panel p-3.5 rounded-2xl cursor-pointer hover:bg-white/95 transition-all border border-pink-50 min-w-0"
         >
           <div className="flex items-center gap-1.5 mb-1 text-emerald-500">
             <CheckSquare size={14} className="shrink-0" />
