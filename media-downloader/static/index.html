@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>MediaGrab — Universal Video & MP3 Downloader</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    }
+
+    body {
+      background: #0f172a;
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(239, 68, 68, 0.15), transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(168, 85, 247, 0.15), transparent 40%);
+      background-attachment: fixed;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 580px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .header-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 9999px;
+      color: #f87171;
+      font-size: 0.75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.75rem;
+    }
+
+    .header h1 {
+      font-size: 2.25rem;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+    }
+
+    .header p {
+      font-size: 0.95rem;
+      color: #94a3b8;
+    }
+
+    .card {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      padding: 1.75rem;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    .input-group {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 1.25rem;
+    }
+
+    .url-input {
+      flex: 1;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      padding: 0.875rem 1.25rem;
+      color: #ffffff;
+      font-size: 0.95rem;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .url-input:focus {
+      border-color: #ef4444;
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+    }
+
+    .btn-paste {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #cbd5e1;
+      padding: 0 1rem;
+      border-radius: 16px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-paste:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #ffffff;
+    }
+
+    .btn-primary {
+      width: 100%;
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: #ffffff;
+      border: none;
+      padding: 1rem;
+      border-radius: 16px;
+      font-size: 1rem;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+      box-shadow: 0 10px 20px rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 15px 25px rgba(239, 68, 68, 0.4);
+    }
+
+    .btn-primary:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 1.25rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+      color: #94a3b8;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    /* Result Preview Card */
+    .preview-card {
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: none;
+    }
+
+    .preview-card.active {
+      display: block;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .media-info {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .media-thumb {
+      width: 120px;
+      height: 80px;
+      border-radius: 12px;
+      object-cover: cover;
+      background: #0f172a;
+      flex-shrink: 0;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .media-meta {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .media-title {
+      font-size: 0.95rem;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1.3;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      margin-bottom: 0.25rem;
+    }
+
+    .media-uploader {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .format-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 1.25rem;
+    }
+
+    .format-btn {
+      background: rgba(15, 23, 42, 0.6);
+      border: 2px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 0.85rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .format-btn.active {
+      border-color: #ef4444;
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    .format-btn h4 {
+      font-size: 0.9rem;
+      font-weight: 800;
+      color: #ffffff;
+      margin-bottom: 2px;
+    }
+
+    .format-btn p {
+      font-size: 0.75rem;
+      color: #94a3b8;
+    }
+
+    .status-msg {
+      margin-top: 1rem;
+      font-size: 0.85rem;
+      text-align: center;
+      display: none;
+    }
+
+    .status-msg.error {
+      color: #f87171;
+      display: block;
+    }
+
+    .status-msg.info {
+      color: #38bdf8;
+      display: block;
+    }
+
+    .back-home {
+      margin-top: 2rem;
+      text-align: center;
+    }
+
+    .back-home a {
+      color: #94a3b8;
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 700;
+      transition: color 0.2s;
+    }
+
+    .back-home a:hover {
+      color: #ffffff;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="header">
+      <div class="header-badge">
+        <span>⚡ 100% Werbefrei & Privat</span>
+      </div>
+      <h1>MediaGrab</h1>
+      <p>Videos & MP3s von YouTube, TikTok, Insta & Co. blitzschnell speichern</p>
+    </div>
+
+    <div class="card">
+      <div class="input-group">
+        <input 
+          type="text" 
+          id="urlInput" 
+          class="url-input" 
+          placeholder="Link hier einfügen (z. B. YouTube, TikTok, Reel)..."
+          autocomplete="off"
+        />
+        <button id="btnPaste" class="btn-paste" type="button">📋 Einfügen</button>
+      </div>
+
+      <button id="btnFetch" class="btn-primary" type="button">
+        <span>🔍 Video analysieren</span>
+      </button>
+
+      <div class="badges">
+        <span class="badge">▶️ YouTube</span>
+        <span class="badge">🎵 TikTok</span>
+        <span class="badge">📸 Instagram</span>
+        <span class="badge">🐦 Twitter / X</span>
+        <span class="badge">🎧 SoundCloud</span>
+      </div>
+
+      <div id="statusMsg" class="status-msg"></div>
+
+      <!-- Result Card -->
+      <div id="previewCard" class="preview-card">
+        <div class="media-info">
+          <img id="mediaThumb" class="media-thumb" src="" alt="Thumbnail" />
+          <div class="media-meta">
+            <h3 id="mediaTitle" class="media-title"></h3>
+            <p class="media-uploader">
+              <span id="mediaUploader"></span> • <span id="mediaDuration"></span>
+            </p>
+          </div>
+        </div>
+
+        <div class="format-options">
+          <div id="optVideo" class="format-btn active" onclick="selectFormat('mp4_best')">
+            <h4>🎬 Video (MP4)</h4>
+            <p>Beste HD-Qualität</p>
+          </div>
+          <div id="optAudio" class="format-btn" onclick="selectFormat('mp3')">
+            <h4>🎵 Audio (MP3)</h4>
+            <p>Reine Tonspur</p>
+          </div>
+        </div>
+
+        <button id="btnDownload" class="btn-primary" type="button" onclick="startDownload()">
+          <span>⬇️ Jetzt herunterladen</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="back-home">
+      <a href="/">← Zurück zum Strato Portal</a>
+    </div>
+  </div>
+
+  <script>
+    let selectedFormat = 'mp4_best';
+    let currentUrl = '';
+
+    const urlInput = document.getElementById('urlInput');
+    const btnPaste = document.getElementById('btnPaste');
+    const btnFetch = document.getElementById('btnFetch');
+    const previewCard = document.getElementById('previewCard');
+    const statusMsg = document.getElementById('statusMsg');
+    const mediaThumb = document.getElementById('mediaThumb');
+    const mediaTitle = document.getElementById('mediaTitle');
+    const mediaUploader = document.getElementById('mediaUploader');
+    const mediaDuration = document.getElementById('mediaDuration');
+    const optVideo = document.getElementById('optVideo');
+    const optAudio = document.getElementById('optAudio');
+    const btnDownload = document.getElementById('btnDownload');
+
+    btnPaste.addEventListener('click', async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+          urlInput.value = text.trim();
+          fetchMediaInfo();
+        }
+      } catch (e) {
+        urlInput.focus();
+      }
+    });
+
+    btnFetch.addEventListener('click', fetchMediaInfo);
+    urlInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') fetchMediaInfo();
+    });
+
+    function showStatus(text, type = 'info') {
+      statusMsg.className = 'status-msg ' + type;
+      statusMsg.textContent = text;
+    }
+
+    function clearStatus() {
+      statusMsg.className = 'status-msg';
+      statusMsg.textContent = '';
+    }
+
+    function selectFormat(fmt) {
+      selectedFormat = fmt;
+      if (fmt === 'mp4_best') {
+        optVideo.classList.add('active');
+        optAudio.classList.remove('active');
+      } else {
+        optAudio.classList.add('active');
+        optVideo.classList.remove('active');
+      }
+    }
+
+    async function fetchMediaInfo() {
+      const url = urlInput.value.trim();
+      if (!url) {
+        showStatus('Bitte einen gültigen Link eingeben.', 'error');
+        return;
+      }
+
+      currentUrl = url;
+      clearStatus();
+      previewCard.classList.remove('active');
+      btnFetch.disabled = true;
+      btnFetch.innerHTML = '<span>⏳ Video wird analysiert...</span>';
+
+      try {
+        const res = await fetch('/api/info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.detail || 'Konnte Video nicht laden.');
+        }
+
+        mediaTitle.textContent = data.title;
+        mediaUploader.textContent = data.uploader;
+        mediaDuration.textContent = data.duration;
+        mediaThumb.src = data.thumbnail || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="60"><rect width="100" height="60" fill="%23334155"/></svg>';
+        
+        previewCard.classList.add('active');
+      } catch (err) {
+        showStatus('⚠️ ' + err.message, 'error');
+      } finally {
+        btnFetch.disabled = false;
+        btnFetch.innerHTML = '<span>🔍 Video analysieren</span>';
+      }
+    }
+
+    function startDownload() {
+      if (!currentUrl) return;
+      btnDownload.disabled = true;
+      btnDownload.innerHTML = '<span>⏳ Datei wird vorbereitet...</span>';
+
+      const downloadUrl = `/api/download?url=${encodeURIComponent(currentUrl)}&format_type=${selectedFormat}`;
+      window.location.href = downloadUrl;
+
+      setTimeout(() => {
+        btnDownload.disabled = false;
+        btnDownload.innerHTML = '<span>⬇️ Jetzt herunterladen</span>';
+      }, 5000);
+    }
+  </script>
+</body>
+</html>

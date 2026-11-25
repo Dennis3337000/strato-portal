@@ -48,19 +48,15 @@ services:
       - crypto-analyzer-data:/app/backend/data
 
   # ==========================================
-  # 4. UPTIME KUMA (24/7 Server- & Bot-Radar)
+  # 4. MEDIA DOWNLOADER (YouTube / TikTok / Insta)
   # ==========================================
-  uptime-kuma:
-    image: louislam/uptime-kuma:1
-    restart: unless-stopped
-    ports:
-      - "3001:3001"
+  media-downloader:
+    build:
+      context: ./media-downloader
     networks:
       - strato-net
-    volumes:
-      - uptime-kuma-data:/app/data
+    restart: unless-stopped
 
 volumes:
   couple-app-data:
   crypto-analyzer-data:
-  uptime-kuma-data:
