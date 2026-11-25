@@ -18,9 +18,11 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./landing-page:/usr/share/nginx/html:ro
+      - ./slot-machine:/usr/share/nginx/html/slot:ro
     depends_on:
       - couple-app
       - crypto-analyzer
+      - uptime-kuma
 
   # ==========================================
   # 2. DIE COUPLE APP
@@ -46,6 +48,18 @@ services:
     volumes:
       - crypto-analyzer-data:/app/backend/data
 
+  # ==========================================
+  # 4. UPTIME KUMA (24/7 Server- & Bot-Radar)
+  # ==========================================
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    restart: unless-stopped
+    networks:
+      - strato-net
+    volumes:
+      - uptime-kuma-data:/app/data
+
 volumes:
   couple-app-data:
   crypto-analyzer-data:
+  uptime-kuma-data:
