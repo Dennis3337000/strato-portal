@@ -18,11 +18,10 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./landing-page:/usr/share/nginx/html:ro
-      - ./slot-machine:/usr/share/nginx/html/slot:ro
+      - ./slot-machine:/usr/share/nginx/slot:ro
     depends_on:
       - couple-app
       - crypto-analyzer
-      - uptime-kuma
 
   # ==========================================
   # 2. DIE COUPLE APP
