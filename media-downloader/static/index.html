@@ -391,14 +391,19 @@
 
     btnPaste.addEventListener('click', async () => {
       try {
-        const text = await navigator.clipboard.readText();
-        if (text) {
-          urlInput.value = text.trim();
-          fetchMediaInfo();
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          const text = await navigator.clipboard.readText();
+          if (text && text.trim().startsWith('http')) {
+            urlInput.value = text.trim();
+            fetchMediaInfo();
+            return;
+          }
         }
       } catch (e) {
-        urlInput.focus();
+        // Fallback fuer Safari/iOS bei Clipboard Pattern-Fehlern
       }
+      urlInput.focus();
+      urlInput.select();
     });
 
     btnFetch.addEventListener('click', fetchMediaInfo);
@@ -441,7 +446,12 @@
       btnFetch.innerHTML = '<span>⏳ Video wird analysiert...</span>';
 
       try {
-        const res = await fetch('/api/info', {
+        // Relativer Aufruf fuer Reverse-Proxy Kompatibilitaet
+        const endpoint = window.location.pathname.endsWith('/') 
+          ? window.location.pathname + 'api/info' 
+          : window.location.pathname + '/api/info';
+
+        const res = await fetch(endpoint.replace('//', '/'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url })
@@ -471,7 +481,11 @@
       btnDownload.disabled = true;
       btnDownload.innerHTML = '<span>⏳ Datei wird vorbereitet...</span>';
 
-      const downloadUrl = `/api/download?url=${encodeURIComponent(currentUrl)}&format_type=${selectedFormat}`;
+      const basePath = window.location.pathname.endsWith('/') 
+        ? window.location.pathname 
+        : window.location.pathname + '/';
+
+      const downloadUrl = `${basePath}api/download?url=${encodeURIComponent(currentUrl)}&format_type=${selectedFormat}`.replace('//', '/');
       window.location.href = downloadUrl;
 
       setTimeout(() => {

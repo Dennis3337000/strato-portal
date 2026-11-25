@@ -49,6 +49,9 @@ def get_media_info(req: InfoRequest):
         'extract_flat': False,
         'quiet': True,
         'no_warnings': True,
+        'noplaylist': True,
+        'socket_timeout': 15,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
 
     try:
@@ -91,6 +94,9 @@ def download_media(url: str, format_type: str = "mp4_best", background_tasks: Ba
             'outtmpl': output_template,
             'quiet': True,
             'no_warnings': True,
+            'noplaylist': True,
+            'socket_timeout': 30,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
@@ -103,6 +109,9 @@ def download_media(url: str, format_type: str = "mp4_best", background_tasks: Ba
             'outtmpl': output_template,
             'quiet': True,
             'no_warnings': True,
+            'noplaylist': True,
+            'socket_timeout': 30,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'merge_output_format': 'mp4',
         }
 
