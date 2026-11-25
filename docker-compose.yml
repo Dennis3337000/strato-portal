@@ -69,6 +69,16 @@ services:
     volumes:
       - qr-drop-data:/app/uploads
 
+  # ==========================================
+  # 6. TANKSMART (Live Spritpreis Radar)
+  # ==========================================
+  tanksmart:
+    build:
+      context: ./tanksmart
+    networks:
+      - strato-net
+    restart: unless-stopped
+
 volumes:
   couple-app-data:
   crypto-analyzer-data:
