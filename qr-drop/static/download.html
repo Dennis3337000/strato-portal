@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>QR-Drop — Datei empfangen</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+    body {
+      background: #090d16;
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(16, 185, 129, 0.15), transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(6, 182, 212, 0.15), transparent 40%);
+      background-attachment: fixed;
+    }
+    .container { width: 100%; max-width: 480px; text-align: center; }
+    .card {
+      background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 28px; padding: 2.25rem 1.75rem; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    }
+    .file-icon {
+      font-size: 3.5rem; margin-bottom: 1.25rem; display: inline-block;
+      filter: drop-shadow(0 10px 15px rgba(0,0,0,0.3));
+    }
+    .file-title {
+      font-size: 1.25rem; font-weight: 800; color: #ffffff; margin-bottom: 0.5rem;
+      word-break: break-all;
+    }
+    .file-meta {
+      font-size: 0.85rem; color: #94a3b8; margin-bottom: 1.5rem;
+    }
+    .burn-badge {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px;
+      background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 9999px; color: #f87171; font-size: 0.75rem; font-weight: 800;
+      margin-bottom: 1.5rem;
+    }
+    .btn-download {
+      width: 100%; background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #ffffff; border: none; padding: 1.1rem; border-radius: 18px;
+      font-size: 1.05rem; font-weight: 800; cursor: pointer; display: flex;
+      align-items: center; justify-content: center; gap: 10px;
+      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.35); transition: all 0.2s;
+    }
+    .btn-download:hover { transform: translateY(-2px); box-shadow: 0 15px 30px rgba(16, 185, 129, 0.45); }
+    .btn-download:active { transform: scale(0.98); }
+    .error-box { display: none; color: #f87171; font-size: 0.95rem; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="card">
+      <div id="loadingView">
+        <div style="font-size: 2rem; margin-bottom: 1rem;">⏳</div>
+        <p style="color: #94a3b8; font-size: 0.9rem;">Datei-Details werden geladen...</p>
+      </div>
+
+      <div id="contentView" style="display: none;">
+        <span class="file-icon">📦</span>
+        <h2 id="fileName" class="file-title"></h2>
+        <p id="fileMeta" class="file-meta"></p>
+
+        <div id="burnBadge" class="burn-badge" style="display: none;">
+          <span>🔥 Einmal-Download (wird danach sofort gelöscht)</span>
+        </div>
+
+        <button id="btnDownload" class="btn-download" type="button">
+          <span>⬇️ Jetzt herunterladen</span>
+        </button>
+      </div>
+
+      <div id="errorView" class="error-box">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">🗑️</div>
+        <h3>Datei nicht gefunden</h3>
+        <p style="color: #94a3b8; font-size: 0.85rem; margin-top: 0.5rem;">
+          Diese Datei existiert nicht mehr oder ist abgelaufen.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const pathParts = window.location.pathname.split('/');
+    const token = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2];
+
+    const loadingView = document.getElementById('loadingView');
+    const contentView = document.getElementById('contentView');
+    const errorView = document.getElementById('errorView');
+    const fileName = document.getElementById('fileName');
+    const fileMeta = document.getElementById('fileMeta');
+    const burnBadge = document.getElementById('burnBadge');
+    const btnDownload = document.getElementById('btnDownload');
+
+    async function loadInfo() {
+      if (!token) {
+        showError();
+        return;
+      }
+
+      try {
+        const basePath = window.location.pathname.includes('/drop/') ? '/drop' : '';
+        const res = await fetch(`${basePath}/api/file/${token}`);
+        if (!res.ok) throw new Error();
+
+        const data = await res.json();
+        fileName.textContent = data.filename;
+        fileMeta.textContent = `${data.size} • Bereitgestellt über QR-Drop`;
+
+        if (data.burn_after_read) {
+          burnBadge.style.display = 'inline-flex';
+        }
+
+        btnDownload.addEventListener('click', () => {
+          btnDownload.disabled = true;
+          btnDownload.innerHTML = '<span>⏳ Download startet...</span>';
+          window.location.href = `${basePath}/api/download/${token}`;
+          if (data.burn_after_read) {
+            setTimeout(() => {
+              btnDownload.innerHTML = '<span>🔥 Datei gelöscht</span>';
+            }, 3000);
+          }
+        });
+
+        loadingView.style.display = 'none';
+        contentView.style.display = 'block';
+      } catch (e) {
+        showError();
+      }
+    }
+
+    function showError() {
+      loadingView.style.display = 'none';
+      contentView.style.display = 'none';
+      errorView.style.display = 'block';
+    }
+
+    loadInfo();
+  </script>
+</body>
+</html>

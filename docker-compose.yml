@@ -57,6 +57,19 @@ services:
       - strato-net
     restart: unless-stopped
 
+  # ==========================================
+  # 5. QR-DROP (Privates QuickShare & WeTransfer)
+  # ==========================================
+  qr-drop:
+    build:
+      context: ./qr-drop
+    networks:
+      - strato-net
+    restart: unless-stopped
+    volumes:
+      - qr-drop-data:/app/uploads
+
 volumes:
   couple-app-data:
   crypto-analyzer-data:
+  qr-drop-data:
