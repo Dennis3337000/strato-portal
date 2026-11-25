@@ -201,10 +201,10 @@ export default function Dashboard({
 
   return (
     <div className="space-y-3 pb-3 animate-in w-full max-w-full overflow-hidden">
-      {/* Responsive Grid: Auf Smartphone 1 Spalte, ab Tablet/Desktop (md:) 2 Spalten */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 items-start">
+      {/* Responsive Grid: Smartphone 1 Spalte, Tablet 2 Spalten, Widescreen 12-Spalten-Layout (7 Links / 5 Rechts) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-4 lg:gap-6 items-start">
         {/* Linke Spalte auf Desktop: Liebes-Counter & Großer Herz-Rahmen */}
-        <div className="space-y-3">
+        <div className="space-y-4 md:col-span-1 xl:col-span-7">
           {/* Love Counter Hero Card */}
           <div className="glass-panel p-4 rounded-3xl relative overflow-hidden text-center shadow-xs">
         <div className="relative z-10">
@@ -269,10 +269,10 @@ export default function Dashboard({
           </div>
 
           {/* Weißes Passepartout / Foto-Bett mit Herz-Ornamentik */}
-          <div className="bg-white p-2 sm:p-2.5 rounded-[24px] shadow-xs relative overflow-hidden border border-pink-100">
+          <div className="bg-white p-2.5 sm:p-3 rounded-[24px] shadow-xs relative overflow-hidden border border-pink-100">
             {activePhoto ? (
               <div 
-                className="relative w-full aspect-4/3 sm:h-76 rounded-[18px] overflow-hidden bg-pink-50 group shadow-inner cursor-pointer"
+                className="relative w-full h-76 sm:h-88 md:h-96 lg:h-[420px] rounded-[20px] overflow-hidden bg-pink-50 group shadow-inner cursor-pointer"
                 onClick={() => setSelectedFullscreenPhoto(activePhoto)}
               >
                 {/* Das Foto im Herz-Rahmen mit sanftem Zoom & Wechsel */}
@@ -364,7 +364,7 @@ export default function Dashboard({
               /* Empty State im Bilderrahmen */
               <div 
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full aspect-4/3 sm:h-76 rounded-[18px] border-2 border-dashed border-pink-300 bg-pink-50/50 hover:bg-pink-50 transition-all flex flex-col items-center justify-center p-4 text-center cursor-pointer group"
+                className="w-full h-76 sm:h-88 md:h-96 lg:h-[420px] rounded-[20px] border-2 border-dashed border-pink-300 bg-pink-50/50 hover:bg-pink-50 transition-all flex flex-col items-center justify-center p-4 text-center cursor-pointer group"
               >
                 <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-pink-400 to-rose-300 text-white flex items-center justify-center text-2xl shadow-md mb-2.5 group-hover:scale-110 transition-transform">
                   📸
@@ -425,7 +425,7 @@ export default function Dashboard({
     </div>
 
     {/* Rechte Spalte auf Desktop: Countdowns, Stimmungs-Radar & Aktionen */}
-    <div className="space-y-3">
+    <div className="space-y-4 md:col-span-1 xl:col-span-5">
       {/* Birthday Banner if available */}
       {nextBirthdayInfo && (
         <div className="bg-gradient-to-r from-amber-400 via-rose-300 to-pink-400 text-white p-3 rounded-2xl shadow-sm flex items-center justify-between">
