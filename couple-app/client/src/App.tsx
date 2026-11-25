@@ -380,7 +380,7 @@ export default function App() {
   const unboughtCount = shopping.filter(s => !s.is_bought).length;
 
   return (
-    <div className="min-h-[100dvh] w-full max-w-md mx-auto relative flex flex-col font-sans select-none overflow-x-hidden pb-18">
+    <div className="min-h-[100dvh] w-full max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto relative flex flex-col font-sans select-none overflow-x-hidden pb-20 px-2 sm:px-4">
       {/* Background Subtle Blobs with pointer-events-none */}
       <div className="fixed top-[-50px] left-[-50px] w-56 h-56 bg-[var(--color-primary-light)] rounded-full mix-blend-multiply filter blur-3xl opacity-50 animate-blob pointer-events-none" />
       <div className="fixed top-[200px] right-[-60px] w-56 h-56 bg-[var(--color-secondary)] rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000 pointer-events-none" />

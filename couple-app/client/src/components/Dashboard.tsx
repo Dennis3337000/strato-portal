@@ -201,8 +201,12 @@ export default function Dashboard({
 
   return (
     <div className="space-y-3 pb-3 animate-in w-full max-w-full overflow-hidden">
-      {/* Love Counter Hero Card */}
-      <div className="glass-panel p-4 rounded-3xl relative overflow-hidden text-center shadow-xs">
+      {/* Responsive Grid: Auf Smartphone 1 Spalte, ab Tablet/Desktop (md:) 2 Spalten */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 items-start">
+        {/* Linke Spalte auf Desktop: Liebes-Counter & Großer Herz-Rahmen */}
+        <div className="space-y-3">
+          {/* Love Counter Hero Card */}
+          <div className="glass-panel p-4 rounded-3xl relative overflow-hidden text-center shadow-xs">
         <div className="relative z-10">
           <span className="text-[10px] uppercase tracking-widest font-extrabold text-gray-400">
             Unsere Liebesgeschichte
@@ -418,7 +422,10 @@ export default function Dashboard({
           </div>
         </div>
       </div>
+    </div>
 
+    {/* Rechte Spalte auf Desktop: Countdowns, Stimmungs-Radar & Aktionen */}
+    <div className="space-y-3">
       {/* Birthday Banner if available */}
       {nextBirthdayInfo && (
         <div className="bg-gradient-to-r from-amber-400 via-rose-300 to-pink-400 text-white p-3 rounded-2xl shadow-sm flex items-center justify-between">
@@ -661,6 +668,8 @@ export default function Dashboard({
           <span className="text-[9px] text-gray-400 block truncate">Jetzt einlösen →</span>
         </div>
       </div>
+    </div>
+  </div>
 
       {/* Hidden File Input for Mobile Camera / Gallery */}
       <input
