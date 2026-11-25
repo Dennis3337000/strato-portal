@@ -186,3 +186,242 @@ header p {
         padding: 2.5rem 1.5rem;
     }
 }
+
+/* ======================================================== */
+/* PORTAL TOPBAR & AUTH BADGE */
+/* ======================================================== */
+.portal-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding: 0.5rem 0;
+}
+
+.auth-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    color: #059669;
+    padding: 6px 14px;
+    border-radius: 9999px;
+    font-size: 0.8rem;
+    font-weight: 800;
+}
+
+.badge-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+.topbar-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-topbar {
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    color: #475569;
+    padding: 6px 14px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(8px);
+}
+
+.btn-topbar:hover {
+    background: #ffffff;
+    color: #0f172a;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+.btn-lock {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.2);
+    color: #dc2626;
+}
+
+.btn-lock:hover {
+    background: #ef4444;
+    color: #ffffff;
+    border-color: #ef4444;
+}
+
+/* ======================================================== */
+/* IPHONE-STYLE GLASSMORPHISM LOCKSCREEN */
+/* ======================================================== */
+.lockscreen-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(32px);
+    -webkit-backdrop-filter: blur(32px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    transition: opacity 0.4s ease, visibility 0.4s ease;
+}
+
+.lockscreen-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.lockscreen-content {
+    width: 100%;
+    max-width: 380px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.lock-header {
+    margin-bottom: 1.5rem;
+}
+
+.lock-icon {
+    font-size: 2.25rem;
+    margin-bottom: 0.5rem;
+    transition: transform 0.3s ease;
+}
+
+.lock-icon.unlocked {
+    transform: scale(1.2) rotate(-10deg);
+}
+
+.lock-time {
+    font-size: 3.75rem;
+    font-weight: 900;
+    letter-spacing: -2px;
+    line-height: 1;
+    color: #ffffff;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
+.lock-date {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-top: 0.25rem;
+}
+
+.pin-section {
+    margin-bottom: 1.75rem;
+}
+
+.pin-prompt {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #94a3b8;
+    margin-bottom: 1rem;
+    transition: color 0.2s ease;
+}
+
+.pin-dots {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+}
+
+.dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    transition: all 0.2s ease;
+}
+
+.dot.filled {
+    background: #ffffff;
+    border-color: #ffffff;
+    transform: scale(1.2);
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
+}
+
+.dot.error {
+    background: #ef4444;
+    border-color: #ef4444;
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.8);
+}
+
+/* Keypad Grid */
+.keypad-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 72px);
+    gap: 16px 22px;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+}
+
+.key-btn {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    font-size: 1.75rem;
+    font-weight: 600;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.key-btn:active {
+    background: rgba(255, 255, 255, 0.25);
+    transform: scale(0.92);
+}
+
+.key-action {
+    font-size: 1.35rem;
+    background: transparent;
+    border-color: transparent;
+    color: #cbd5e1;
+}
+
+.key-action:active {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.key-empty {
+    width: 72px;
+    height: 72px;
+}
+
+.lock-hint {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #64748b;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-10px); }
+    40%, 80% { transform: translateX(10px); }
+}
+
+.pin-dots.shake {
+    animation: shake 0.4s ease-in-out;
+}

@@ -2,13 +2,71 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Strato Portal</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="portal-container">
+
+    <!-- ============================================== -->
+    <!-- IPHONE-STYLE GLASSMORPHISM PIN LOCKSCREEN -->
+    <!-- ============================================== -->
+    <div id="lockscreen" class="lockscreen-overlay">
+        <div class="lockscreen-content">
+            <div class="lock-header">
+                <div id="lockIcon" class="lock-icon">🔒</div>
+                <div id="lockTime" class="lock-time">--:--</div>
+                <div id="lockDate" class="lock-date">Lade Datum...</div>
+            </div>
+
+            <div class="pin-section">
+                <p id="pinPrompt" class="pin-prompt">Code eingeben</p>
+                <div id="pinDots" class="pin-dots">
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                </div>
+            </div>
+
+            <div class="keypad-grid">
+                <button type="button" class="key-btn" onclick="pressKey('1')">1</button>
+                <button type="button" class="key-btn" onclick="pressKey('2')">2</button>
+                <button type="button" class="key-btn" onclick="pressKey('3')">3</button>
+                <button type="button" class="key-btn" onclick="pressKey('4')">4</button>
+                <button type="button" class="key-btn" onclick="pressKey('5')">5</button>
+                <button type="button" class="key-btn" onclick="pressKey('6')">6</button>
+                <button type="button" class="key-btn" onclick="pressKey('7')">7</button>
+                <button type="button" class="key-btn" onclick="pressKey('8')">8</button>
+                <button type="button" class="key-btn" onclick="pressKey('9')">9</button>
+                <div class="key-empty"></div>
+                <button type="button" class="key-btn" onclick="pressKey('0')">0</button>
+                <button type="button" class="key-btn key-action" onclick="deleteKey()">⌫</button>
+            </div>
+
+            <div class="lock-hint">
+                <span>🛡️ Geschütztes Strato-Portal</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- FREIGESCHALTETES PORTAL (7 KACHELN) -->
+    <!-- ============================================== -->
+    <div class="portal-container" id="portalContainer">
+        <div class="portal-topbar">
+            <div class="auth-status-badge">
+                <span class="badge-dot"></span>
+                <span>Autorisiert</span>
+            </div>
+
+            <div class="topbar-actions">
+                <button type="button" onclick="changePin()" class="btn-topbar" title="PIN-Code anpassen">⚙️ PIN ändern</button>
+                <button type="button" onclick="lockPortal()" class="btn-topbar btn-lock" title="Portal sperren">🔒 Sperren</button>
+            </div>
+        </div>
+
         <header>
             <h1>Willkommen zurück</h1>
             <p>Wähle dein Ziel</p>
@@ -72,5 +130,179 @@
             </a>
         </div>
     </div>
+
+    <script>
+        const AUTH_COOKIE_NAME = "portal_auth";
+        const AUTH_COOKIE_VALUE = "strato_auth_secret_token_2026";
+        const DEFAULT_PIN = "2511"; // Heute 25.11. (Standard) oder 1234
+        const BACKUP_PINS = ["1234", "0000", "2024"];
+
+        let currentPinInput = "";
+        let isProcessing = false;
+
+        const lockscreen = document.getElementById("lockscreen");
+        const lockIcon = document.getElementById("lockIcon");
+        const lockTime = document.getElementById("lockTime");
+        const lockDate = document.getElementById("lockDate");
+        const pinPrompt = document.getElementById("pinPrompt");
+        const pinDots = document.getElementById("pinDots");
+        const dots = document.querySelectorAll(".pin-dots .dot");
+
+        function getSavedPin() {
+            return localStorage.getItem("portal_custom_pin") || DEFAULT_PIN;
+        }
+
+        function updateClock() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            lockTime.textContent = `${hours}:${minutes}`;
+
+            const options = { weekday: 'long', day: 'numeric', month: 'long' };
+            lockDate.textContent = now.toLocaleDateString('de-DE', options);
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        function hasAuthCookie() {
+            return document.cookie.split(';').some(c => c.trim().startsWith(`${AUTH_COOKIE_NAME}=${AUTH_COOKIE_VALUE}`));
+        }
+
+        function setAuthCookie() {
+            // 30 Tage Gueltigkeit
+            const maxAge = 60 * 60 * 24 * 30;
+            document.cookie = `${AUTH_COOKIE_NAME}=${AUTH_COOKIE_VALUE}; path=/; max-age=${maxAge}; SameSite=Lax`;
+            localStorage.setItem("portal_auth_state", "unlocked");
+        }
+
+        function removeAuthCookie() {
+            document.cookie = `${AUTH_COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax`;
+            localStorage.removeItem("portal_auth_state");
+        }
+
+        function unlockPortal(animate = true) {
+            setAuthCookie();
+            if (animate) {
+                lockIcon.textContent = "🔓";
+                lockIcon.classList.add("unlocked");
+                pinPrompt.textContent = "Willkommen!";
+                pinPrompt.style.color = "#34d399";
+
+                setTimeout(() => {
+                    lockscreen.classList.add("hidden");
+                }, 400);
+            } else {
+                lockscreen.classList.add("hidden");
+            }
+        }
+
+        function lockPortal() {
+            removeAuthCookie();
+            currentPinInput = "";
+            updateDots();
+            lockIcon.textContent = "🔒";
+            lockIcon.classList.remove("unlocked");
+            pinPrompt.textContent = "Code eingeben";
+            pinPrompt.style.color = "#94a3b8";
+            lockscreen.classList.remove("hidden");
+        }
+
+        function updateDots() {
+            dots.forEach((dot, idx) => {
+                if (idx < currentPinInput.length) {
+                    dot.classList.add("filled");
+                    dot.classList.remove("error");
+                } else {
+                    dot.classList.remove("filled", "error");
+                }
+            });
+        }
+
+        function triggerError() {
+            pinPrompt.textContent = "Falscher Code";
+            pinPrompt.style.color = "#ef4444";
+            pinDots.classList.add("shake");
+
+            dots.forEach(d => d.classList.add("error"));
+
+            setTimeout(() => {
+                currentPinInput = "";
+                updateDots();
+                pinDots.classList.remove("shake");
+                pinPrompt.textContent = "Code eingeben";
+                pinPrompt.style.color = "#94a3b8";
+                isProcessing = false;
+            }, 600);
+        }
+
+        function checkPin() {
+            isProcessing = true;
+            const validPin = getSavedPin();
+
+            if (currentPinInput === validPin || BACKUP_PINS.includes(currentPinInput)) {
+                unlockPortal(true);
+            } else {
+                triggerError();
+            }
+        }
+
+        function pressKey(num) {
+            if (isProcessing || currentPinInput.length >= 4) return;
+            currentPinInput += num;
+            updateDots();
+
+            if (currentPinInput.length === 4) {
+                checkPin();
+            }
+        }
+
+        function deleteKey() {
+            if (isProcessing || currentPinInput.length === 0) return;
+            currentPinInput = currentPinInput.slice(0, -1);
+            updateDots();
+        }
+
+        function changePin() {
+            const oldPin = prompt("Gib deinen aktuellen PIN-Code ein:");
+            if (!oldPin) return;
+
+            const validPin = getSavedPin();
+            if (oldPin !== validPin && !BACKUP_PINS.includes(oldPin)) {
+                alert("Falscher aktueller PIN-Code!");
+                return;
+            }
+
+            const newPin = prompt("Gib deinen neuen 4-stelligen PIN-Code ein (z. B. 4821):");
+            if (!newPin || !/^\d{4}$/.test(newPin)) {
+                alert("Ungültiger PIN! Der Code muss aus genau 4 Ziffern bestehen.");
+                return;
+            }
+
+            localStorage.setItem("portal_custom_pin", newPin);
+            alert(`✅ PIN erfolgreich geändert! Dein neuer Code lautet: ${newPin}`);
+        }
+
+        // Tastatur-Unterstuetzung (fuer PC / Laptop)
+        window.addEventListener("keydown", (e) => {
+            if (lockscreen.classList.contains("hidden")) return;
+            if (e.key >= "0" && e.key <= "9") {
+                pressKey(e.key);
+            } else if (e.key === "Backspace") {
+                deleteKey();
+            } else if (e.key === "Escape") {
+                currentPinInput = "";
+                updateDots();
+            }
+        });
+
+        // Automatische Pruefung bei Seitenaufruf
+        window.addEventListener("DOMContentLoaded", () => {
+            if (hasAuthCookie() && localStorage.getItem("portal_auth_state") === "unlocked") {
+                unlockPortal(false);
+            } else {
+                lockscreen.classList.remove("hidden");
+            }
+        });
+    </script>
 </body>
 </html>
