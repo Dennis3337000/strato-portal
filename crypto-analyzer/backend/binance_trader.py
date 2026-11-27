@@ -10,11 +10,14 @@ TESTNET_BASE_URL = "https://testnet.binancefuture.com"
 MAINNET_BASE_URL = "https://fapi.binance.com"
 
 def get_env_config() -> Dict[str, str]:
-    """Liest die lokale .env Datei im backend Ordner ein."""
+    """Liest Umgebungsvariablen aus .env, .env.example oder dem data-Ordner ein."""
     current_dir = os.path.dirname(os.path.abspath(__file__))
     candidates = [
         os.path.join(current_dir, ".env"),
         os.path.join(current_dir, "..", ".env"),
+        os.path.join(current_dir, "data", ".env"),
+        os.path.join(current_dir, ".env.example"),
+        os.path.join(current_dir, "..", ".env.example"),
     ]
     env_vars = {}
     for path in candidates:
@@ -25,8 +28,11 @@ def get_env_config() -> Dict[str, str]:
                         line = line.strip()
                         if line and not line.startswith("#") and "=" in line:
                             k, v = line.split("=", 1)
-                            env_vars[k.strip()] = v.strip().strip('"').strip("'")
-                break
+                            clean_k = k.strip()
+                            clean_v = v.strip().strip('"').strip("'")
+                            # Echte Werte bevorzugen, Platzhalter ueberschreiben
+                            if clean_k not in env_vars or (env_vars[clean_k].startswith("DEIN_") and not clean_v.startswith("DEIN_")):
+                                env_vars[clean_k] = clean_v
             except Exception:
                 pass
     return env_vars
@@ -52,6 +58,23 @@ def get_api_credentials() -> Dict[str, Any]:
     else:
         api_key = os.environ.get("BINANCE_API_KEY") or cfg.get("BINANCE_API_KEY", "")
         api_secret = os.environ.get("BINANCE_API_SECRET") or cfg.get("BINANCE_API_SECRET", "")
+
+    # Fallback auf bot_config.json im persistenten Docker-Datenvolume
+    if not api_key or api_key.startswith("DEIN_"):
+        data_cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "bot_config.json")
+        if os.path.exists(data_cfg_path):
+            try:
+                import json
+                with open(data_cfg_path, "r", encoding="utf-8") as f:
+                    data_cfg = json.load(f)
+                    if testnet:
+                        api_key = api_key or data_cfg.get("binance_testnet_api_key", "")
+                        api_secret = api_secret or data_cfg.get("binance_testnet_api_secret", "")
+                    else:
+                        api_key = api_key or data_cfg.get("binance_api_key", "")
+                        api_secret = api_secret or data_cfg.get("binance_api_secret", "")
+            except Exception:
+                pass
 
     return {
         "api_key": api_key,

@@ -34,6 +34,12 @@ $COMPOSE up -d
 echo "=== 3. Lade Strato-Portal neu ==="
 cd /root/strato-portal || cd ~/strato-portal
 git pull
+
+# Automatische Erstellung der .env aus .env.example falls noch nicht vorhanden
+if [ ! -f "crypto-analyzer/backend/.env" ] && [ -f "crypto-analyzer/backend/.env.example" ]; then
+    cp crypto-analyzer/backend/.env.example crypto-analyzer/backend/.env
+fi
+
 $COMPOSE down || true
 $COMPOSE up -d --build
 

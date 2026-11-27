@@ -9,11 +9,13 @@ import requests
 TESTNET_BASE_URL = "https://testnet.binance.vision"
 
 def get_env_config() -> Dict[str, str]:
-    """Liest die lokale .env Datei im backend Ordner ein."""
+    """Liest die lokale .env oder .env.example Datei im backend Ordner ein."""
     current_dir = os.path.dirname(os.path.abspath(__file__))
     candidates = [
         os.path.join(current_dir, ".env"),
         os.path.join(current_dir, "..", ".env"),
+        os.path.join(current_dir, ".env.example"),
+        os.path.join(current_dir, "..", ".env.example"),
     ]
     env_vars = {}
     for path in candidates:
@@ -24,8 +26,10 @@ def get_env_config() -> Dict[str, str]:
                         line = line.strip()
                         if line and not line.startswith("#") and "=" in line:
                             k, v = line.split("=", 1)
-                            env_vars[k.strip()] = v.strip().strip('"').strip("'")
-                break
+                            clean_k = k.strip()
+                            clean_v = v.strip().strip('"').strip("'")
+                            if clean_k not in env_vars or (env_vars[clean_k].startswith("DEIN_") and not clean_v.startswith("DEIN_")):
+                                env_vars[clean_k] = clean_v
             except Exception:
                 pass
     return env_vars

@@ -30,18 +30,31 @@ for sym, coin, lev in coins_to_open:
     if coin in existing_coins:
         continue
     try:
-        order_res = binance_trader.create_order(sym, "BUY", "MARKET", quote_order_qty=margin_per_trade)
+        avg_price = main.get_coin_current_price(sym)
+        raw_qty = (margin_per_trade * lev) / avg_price
+        if sym in ["BTCUSDT"]:
+            target_qty = round(raw_qty, 4)
+        elif sym in ["ETHUSDT", "BNBUSDT", "SOLUSDT"]:
+            target_qty = round(raw_qty, 3)
+        elif sym in ["LINKUSDT", "AVAXUSDT"]:
+            target_qty = round(raw_qty, 2)
+        elif sym in ["SUIUSDT", "NEARUSDT", "ADAUSDT", "XRPUSDT"]:
+            target_qty = round(raw_qty, 1)
+        elif sym in ["DOGEUSDT", "PEPEUSDT"]:
+            target_qty = float(int(raw_qty))
+        else:
+            target_qty = round(raw_qty, 2)
+            
+        order_res = binance_trader.create_order(sym, "BUY", "MARKET", quantity=target_qty)
         if not order_res.get("success"):
             print(f"Fehler bei {coin}: {order_res.get('error')}")
             continue
             
         data = order_res.get("data", {})
-        executed_qty = float(data.get("executedQty", 0.0))
+        executed_qty = float(data.get("executedQty", target_qty))
         fills = data.get("fills", [])
         if fills:
             avg_price = sum(float(f["price"]) * float(f["qty"]) for f in fills) / (executed_qty or 1.0)
-        else:
-            avg_price = main.get_coin_current_price(sym)
             
         actual_spent = avg_price * executed_qty
         notional_val = actual_spent * lev

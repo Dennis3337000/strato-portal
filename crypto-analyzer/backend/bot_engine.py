@@ -719,11 +719,12 @@ def scan_and_open_new_trades(analysis_func, best_pick_func, btc_regime_func=None
         return
 
     # 2. Sicherheitspruefung: Bitcoin-Makro-Trendwaechter
+    btc_allows_longs = True
     if btc_regime_func:
         btc_regime = btc_regime_func()
         if not btc_regime.get("allow_altcoin_buys", True):
-            add_bot_log("INFO", f"Marktwaechter: {btc_regime.get('reason')} - Neukaeufe zum Schutz vor fallenden Messern pausiert.")
-            return
+            btc_allows_longs = False
+            add_bot_log("INFO", f"Marktwaechter aktiv: {btc_regime.get('reason')} - Long-Positionen pausiert, suche nach Shorts.")
 
     positions = load_positions()
     max_pos = int(cfg.get("max_open_positions", 8))
@@ -820,6 +821,12 @@ def scan_and_open_new_trades(analysis_func, best_pick_func, btc_regime_func=None
                 range_pos >= 68.0 and
                 cand_rsi >= 60.0
             )
+            
+            # Wenn BTC faellt, ueberspringe Long-Setups
+            if not btc_allows_longs:
+                is_dip_entry = False
+                is_breakout_entry = False
+                
             is_valid_entry = is_dip_entry or is_breakout_entry or is_short_entry
             
             if is_valid_entry:
@@ -848,7 +855,24 @@ def scan_and_open_new_trades(analysis_func, best_pick_func, btc_regime_func=None
                 
                 # Calculate Quantity in Base Asset
                 raw_qty = (order_size * leverage) / avg_price
-                target_qty = round(raw_qty, 3)
+                
+                # Exakte Lot-Size Dezimalstellen gemaess verifizierter Binance Spezifikation
+                if sym in ["BTCUSDT"]:
+                    target_qty = round(raw_qty, 4)
+                elif sym in ["ETHUSDT", "BNBUSDT", "SOLUSDT"]:
+                    target_qty = round(raw_qty, 3)
+                elif sym in ["LINKUSDT", "AVAXUSDT"]:
+                    target_qty = round(raw_qty, 2)
+                elif sym in ["SUIUSDT", "NEARUSDT", "ADAUSDT", "XRPUSDT"]:
+                    target_qty = round(raw_qty, 1)
+                elif sym in ["DOGEUSDT", "PEPEUSDT"]:
+                    target_qty = float(int(raw_qty))
+                else:
+                    target_qty = round(raw_qty, 2)
+                    
+                if target_qty <= 0:
+                    add_bot_log("WARNING", f"Geplante Kaufmenge fuer {sym} ({raw_qty}) ist nach Lot-Size-Rundung <= 0. Setup uebersprungen.")
+                    continue
 
                 order_res = binance_trader.create_order(
                     symbol=sym,
