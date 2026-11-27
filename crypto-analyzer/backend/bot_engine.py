@@ -734,12 +734,20 @@ def scan_and_open_new_trades(analysis_func, best_pick_func, btc_regime_func=None
     # Kontostand pruefen
     balance_res = binance_trader.get_account_balance(proxies=proxies)
     if not balance_res.get("success"):
+        _now_ts = time.time()
+        if _now_ts - getattr(scan_and_open_new_trades, "_last_bal_err", 0) > 120:
+            setattr(scan_and_open_new_trades, "_last_bal_err", _now_ts)
+            add_bot_log("WARNING", f"Binance-Verbindung fehlgeschlagen: {balance_res.get('error')}. Trading pausiert.")
         return
         
     usdt_free = float(balance_res.get("usdt_free", 0.0))
     update_cached_usdt(usdt_free)
     order_size = float(cfg.get("order_size_usdt", 50.0))
     if usdt_free < order_size:
+        _now_ts = time.time()
+        if _now_ts - getattr(scan_and_open_new_trades, "_last_low_bal", 0) > 300:
+            setattr(scan_and_open_new_trades, "_last_low_bal", _now_ts)
+            add_bot_log("INFO", f"Warte auf Guthaben: Freies USDT (${usdt_free:.2f}) reicht nicht fuer Ordergroesse (${order_size:.2f}).")
         return
         
     try:
@@ -983,6 +991,12 @@ def scan_and_open_new_trades(analysis_func, best_pick_func, btc_regime_func=None
                     
         if opened_this_cycle > 0:
             add_bot_log("INFO", f"Zyklus abgeschlossen: {opened_this_cycle} Positionen parallel geoeffnet.")
+        elif candidates:
+            _now_sec = time.time()
+            if _now_sec - getattr(scan_and_open_new_trades, "_last_scan_log", 0) > 120:
+                setattr(scan_and_open_new_trades, "_last_scan_log", _now_sec)
+                best = candidates[0]
+                add_bot_log("INFO", f"Scan aktiv: {len(candidates)} Coins geprueft. Bester Pick: {best.get('coin')} (Score: {best.get('score', 0):.1f}/{min_score}, Signal: {best.get('signal_label', 'Warten')}). Markt erfuellt aktuell kein A+ Kriterium.")
     except Exception as e:
         add_bot_log("ERROR", f"Fehler bei Multi-Coin Markt-Scan: {str(e)}")
 
