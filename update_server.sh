@@ -1,46 +1,39 @@
 #!/bin/bash
-echo "=== 1. Erstelle gemeinsames Netzwerk ==="
-docker network create shared-strato-network || true
+set -e
 
-# Ermittle modernen Docker Compose Befehl
+# Sicherstellen, dass wir im strato-portal Verzeichnis sind
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+echo "=== 1. Ermittle Docker Compose Befehl ==="
 if docker compose version &>/dev/null; then
     COMPOSE="docker compose"
 else
     COMPOSE="docker-compose"
 fi
-echo "Verwende Compose Befehl: $COMPOSE"
+echo "Verwende: $COMPOSE"
 
-echo "=== 2. Passe CryptoAnalyzer an ==="
-cd /root/CryptoAnalyzer || cd ~/CryptoAnalyzer
-$COMPOSE down || true
-
-# Ersetze Ports in der compose Datei (Port 80 blockieren)
-sed -i 's/ports:/#ports:/g' docker-compose.yml
-sed -i 's/- "80:80"/#- "80:80"/g' docker-compose.yml
-sed -i "s/- '80:80'/#- '80:80'/g" docker-compose.yml
-
-# Hänge das Netzwerk ans Ende der Datei an, falls es noch nicht da ist
-grep -q "shared-strato-network" docker-compose.yml || echo '
-networks:
-  shared-strato-network:
-    external: true' >> docker-compose.yml
-
-grep -q "\- shared-strato-network" docker-compose.yml || sed -i '/restart: always/a\    networks:\n      - shared-strato-network' docker-compose.yml
-
-sed -i 's/services:/services:\n  cryptoanalyzer:\n    extends:\n      service: app/' docker-compose.yml
-
-$COMPOSE up -d
+# Altes Standalone CryptoAnalyzer nur anfassen, wenn das Verzeichnis wirklich existiert
+if [ -d "/root/CryptoAnalyzer" ] && [ "$SCRIPT_DIR" != "/root/CryptoAnalyzer" ]; then
+    echo "=== 2. Stoppe altes Standalone CryptoAnalyzer ==="
+    (cd /root/CryptoAnalyzer && $COMPOSE down || true)
+fi
 
 echo "=== 3. Lade Strato-Portal neu ==="
-cd /root/strato-portal || cd ~/strato-portal
+git checkout update_server.sh 2>/dev/null || true
 git pull
 
 # Automatische Erstellung der .env aus .env.example falls noch nicht vorhanden
 if [ ! -f "crypto-analyzer/backend/.env" ] && [ -f "crypto-analyzer/backend/.env.example" ]; then
     cp crypto-analyzer/backend/.env.example crypto-analyzer/backend/.env
+    echo "backend/.env wurde automatisch aus .env.example erstellt."
 fi
 
+# Loesche versehentlich erzeugte CRLF-Dateien falls vorhanden
+rm -f "docker-compose.yml"*$'\r'* 2>/dev/null || true
+
+echo "=== 4. Baue und starte alle Container neu ==="
 $COMPOSE down || true
 $COMPOSE up -d --build
 
-echo "=== FERTIG! Dein Portal sollte jetzt online sein. ==="
+echo "=== FERTIG! Dein Strato-Portal laeuft jetzt auf dem neuesten Stand. ==="
